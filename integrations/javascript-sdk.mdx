@@ -9,9 +9,9 @@ The SDK package is `@barekey/sdk`.
 Initialize it once with the API base URL, target project, target stage, and an auth provider.
 
 ```ts
-import { initEnv, env } from "@barekey/sdk";
+import { BarekeyClient } from "@barekey/sdk";
 
-initEnv({
+const env = new BarekeyClient({
   baseUrl: "https://api.barekey.dev",
   projectSlug: "web-4567",
   stageSlug: "production",
