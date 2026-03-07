@@ -1,0 +1,120 @@
+---
+title: "Manage variables"
+description: "List and write variables in a Barekey project stage."
+---
+
+## `POST /v1/env/list`
+
+List variable metadata for one stage.
+
+```json
+{
+  "projectSlug": "web-4567",
+  "stageSlug": "production"
+}
+```
+
+Success response:
+
+```json
+{
+  "variables": [
+    {
+      "name": "DATABASE_URL",
+      "kind": "secret",
+      "createdAtMs": 1741350000000,
+      "updatedAtMs": 1741350000000,
+      "chance": null
+    },
+    {
+      "name": "NEW_CHECKOUT",
+      "kind": "ab_roll",
+      "createdAtMs": 1741350000000,
+      "updatedAtMs": 1741350000000,
+      "chance": 0.2
+    }
+  ]
+}
+```
+
+## `POST /v1/env/write`
+
+Create, update, or delete variables in one request.
+
+Top-level fields:
+
+- `projectSlug`: required
+- `stageSlug`: required
+- `mode`: `create_only` or `upsert`
+- `entries`: array of `secret` or `ab_roll` writes
+- `deletes`: array of variable names
+
+Create or upsert a `secret`:
+
+```json
+{
+  "projectSlug": "web-4567",
+  "stageSlug": "production",
+  "mode": "upsert",
+  "entries": [
+    {
+      "name": "DATABASE_URL",
+      "kind": "secret",
+      "value": "postgres://..."
+    }
+  ],
+  "deletes": []
+}
+```
+
+Create or upsert an `ab_roll`:
+
+```json
+{
+  "projectSlug": "web-4567",
+  "stageSlug": "production",
+  "mode": "upsert",
+  "entries": [
+    {
+      "name": "NEW_CHECKOUT",
+      "kind": "ab_roll",
+      "valueA": "off",
+      "valueB": "on",
+      "chance": 0.2
+    }
+  ],
+  "deletes": []
+}
+```
+
+Delete a variable:
+
+```json
+{
+  "projectSlug": "web-4567",
+  "stageSlug": "production",
+  "mode": "upsert",
+  "entries": [],
+  "deletes": ["DATABASE_URL"]
+}
+```
+
+Success response:
+
+```json
+{
+  "createdCount": 1,
+  "updatedCount": 0,
+  "deletedCount": 0,
+  "requestId": "..."
+}
+```
+
+## Common write errors
+
+- `UNAUTHORIZED`
+- `INVALID_JSON`
+- `INVALID_REQUEST`
+- `WRITE_FAILED`
+- `USAGE_LIMIT_EXCEEDED`
+- `BILLING_UNAVAILABLE`

@@ -1,0 +1,41 @@
+---
+title: "Typegen manifest"
+description: "Fetch the stage manifest used for type-aware tooling."
+---
+
+## `GET /v1/typegen/manifest`
+
+This endpoint returns a manifest for one project stage.
+It requires the same bearer auth as the rest of the API.
+
+Query parameters:
+
+- `projectSlug`: required
+- `stageSlug`: required
+
+Example:
+
+```bash
+curl "https://api.barekey.dev/v1/typegen/manifest?projectSlug=web-4567&stageSlug=production" \
+  -H "authorization: Bearer $TOKEN"
+```
+
+## Response
+
+The response contains the manifest payload, a `manifestVersion`, and a `requestId`.
+
+```json
+{
+  "projectSlug": "web-4567",
+  "stageSlug": "production",
+  "manifestVersion": "...",
+  "requestId": "..."
+}
+```
+
+If the project or stage is missing for the authenticated org, the API returns `MANIFEST_NOT_FOUND`.
+
+## Intended use
+
+Use this endpoint from tooling that wants a typed view of the variables available in a stage.
+Most application code should use the SDK or the evaluation endpoints instead.

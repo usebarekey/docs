@@ -1,0 +1,123 @@
+---
+title: "CLI auth endpoints"
+description: "The device flow and session endpoints used by the Barekey CLI."
+---
+
+## Device flow
+
+### `POST /v1/cli/device/start`
+
+Starts device authorization.
+
+Request body:
+
+```json
+{
+  "clientName": "barekey-cli"
+}
+```
+
+Success response:
+
+```json
+{
+  "deviceCode": "...",
+  "userCode": "AB12CD34",
+  "verificationUri": "https://barekey.dev/cli/device?user_code=AB12CD34",
+  "intervalSec": 5,
+  "expiresInSec": 900
+}
+```
+
+### `POST /v1/cli/device/complete`
+
+Approves the device flow from the browser.
+Requires a Clerk JWT with an active organization.
+
+```json
+{
+  "userCode": "AB12CD34"
+}
+```
+
+### `POST /v1/cli/device/poll`
+
+Polls for approval from the terminal.
+
+```json
+{
+  "deviceCode": "..."
+}
+```
+
+Pending response:
+
+```json
+{
+  "status": "pending",
+  "intervalSec": 5
+}
+```
+
+Approved response:
+
+```json
+{
+  "status": "approved",
+  "intervalSec": 5,
+  "accessToken": "...",
+  "refreshToken": "...",
+  "accessTokenExpiresAtMs": 1741350000000,
+  "refreshTokenExpiresAtMs": 1741954800000,
+  "orgId": "org_...",
+  "orgSlug": "acme-1234",
+  "clerkUserId": "user_..."
+}
+```
+
+## Session refresh
+
+### `POST /v1/cli/token/refresh`
+
+```json
+{
+  "refreshToken": "..."
+}
+```
+
+Returns a fresh access token and refresh token pair.
+
+## Logout
+
+### `POST /v1/cli/logout`
+
+```json
+{
+  "refreshToken": "..."
+}
+```
+
+Returns:
+
+```json
+{
+  "revoked": true
+}
+```
+
+## Inspect current session
+
+### `GET /v1/cli/session`
+
+Requires an access token.
+
+Returns:
+
+```json
+{
+  "clerkUserId": "user_...",
+  "orgId": "org_...",
+  "orgSlug": "acme-1234",
+  "source": "cli"
+}
+```

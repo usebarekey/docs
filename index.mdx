@@ -1,97 +1,51 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "Barekey documentation"
+description: "Encrypted environment variables, deterministic A/B values, and one API surface for your app and tooling."
 ---
 
-## Setting up
+## What Barekey gives you
 
-Get your documentation site up and running in minutes.
+Barekey manages runtime configuration for developer teams.
 
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
+Today, that means:
 
-## Make it yours
+- encrypted variables with per-project envelope encryption
+- deterministic `ab_roll` values for experiments
+- one HTTP API used by the app, the CLI, and the JavaScript SDK
+- Clerk-backed auth for browser and CLI flows
 
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Set up Barekey locally and make your first request.
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="How it works" icon="vault" href="/concepts/how-barekey-works">
+    Learn the org, project, stage, and variable model.
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="JavaScript SDK" icon="code" href="/integrations/javascript-sdk">
+    Fetch variables from Node or server-side application code.
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="CLI" icon="terminal" href="/integrations/cli">
+    Log in, inspect variables, and pull resolved values.
   </Card>
-</Columns>
+</CardGroup>
 
-## Create beautiful pages
+## Current product surface
 
-Everything you need to create world-class documentation.
+Use these docs for the features that are available now:
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+- `secret` variables
+- `ab_roll` variables
+- CLI device login
+- variable evaluation, listing, writing, and pulling
+- JavaScript SDK reads
+- manifest generation for type tooling
 
-## Need inspiration?
+Use the [documentation plan](/roadmap/documentation-plan) for what we still need to add.
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+## Recommended reading order
+
+1. [Quickstart](/quickstart)
+2. [How Barekey works](/concepts/how-barekey-works)
+3. [Variable kinds](/concepts/variable-kinds)
+4. [JavaScript SDK](/integrations/javascript-sdk)
+5. [API authentication](/api-reference/authentication)

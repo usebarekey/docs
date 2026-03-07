@@ -1,0 +1,127 @@
+---
+title: "Evaluate variables"
+description: "Resolve one variable, a batch, or a full stage through the Barekey HTTP API."
+---
+
+## `POST /v1/env/evaluate`
+
+Resolve one variable.
+
+```bash
+curl -X POST https://api.barekey.dev/v1/env/evaluate \
+  -H "authorization: Bearer $TOKEN" \
+  -H "content-type: application/json" \
+  -d '{
+    "projectSlug": "web-4567",
+    "stageSlug": "production",
+    "name": "DATABASE_URL"
+  }'
+```
+
+Request body:
+
+- `projectSlug`: required
+- `stageSlug`: required
+- `name`: required
+- `seed`: optional
+- `key`: optional
+
+Success response:
+
+```json
+{
+  "name": "DATABASE_URL",
+  "kind": "secret",
+  "value": "postgres://..."
+}
+```
+
+For `ab_roll`, `decision` is included:
+
+```json
+{
+  "name": "NEW_CHECKOUT",
+  "kind": "ab_roll",
+  "value": "on",
+  "decision": {
+    "bucket": 0.184,
+    "chance": 0.2,
+    "seed": "user_42",
+    "key": "user_42",
+    "matchedRule": "ab_roll"
+  }
+}
+```
+
+## `POST /v1/env/evaluate-batch`
+
+Resolve a list of variables in one request.
+
+```json
+{
+  "projectSlug": "web-4567",
+  "stageSlug": "production",
+  "names": ["DATABASE_URL", "ENABLE_LOGGING"],
+  "seed": "user_42",
+  "key": "user_42"
+}
+```
+
+Success response:
+
+```json
+{
+  "values": [
+    {
+      "name": "DATABASE_URL",
+      "kind": "secret",
+      "value": "postgres://..."
+    },
+    {
+      "name": "ENABLE_LOGGING",
+      "kind": "secret",
+      "value": "true"
+    }
+  ]
+}
+```
+
+## `POST /v1/env/pull`
+
+Resolve every variable in a stage.
+
+```json
+{
+  "projectSlug": "web-4567",
+  "stageSlug": "production",
+  "seed": "user_42",
+  "key": "user_42"
+}
+```
+
+Success response includes both array and map forms:
+
+```json
+{
+  "values": [
+    {
+      "name": "DATABASE_URL",
+      "kind": "secret",
+      "value": "postgres://..."
+    }
+  ],
+  "byName": {
+    "DATABASE_URL": "postgres://..."
+  }
+}
+```
+
+## Common error codes
+
+- `UNAUTHORIZED`
+- `INVALID_JSON`
+- `INVALID_REQUEST`
+- `VARIABLE_NOT_FOUND`
+- `EVALUATION_FAILED`
+- `USAGE_LIMIT_EXCEEDED`
+- `BILLING_UNAVAILABLE`

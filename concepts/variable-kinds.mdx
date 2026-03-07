@@ -1,0 +1,56 @@
+---
+title: "Variable kinds"
+description: "Use the right Barekey variable type for static secrets and deterministic experiments."
+---
+
+## `secret`
+
+Use `secret` for classic environment values.
+Examples:
+
+- `DATABASE_URL`
+- `STRIPE_SECRET_KEY`
+- `SLACK_WEBHOOK_URL`
+
+A `secret` resolves to the stored value.
+
+## `ab_roll`
+
+Use `ab_roll` when you want one variable name to return either `valueA` or `valueB`.
+
+Each `ab_roll` stores:
+
+- `valueA`
+- `valueB`
+- `chance`
+
+`chance` is a number from `0` to `1`.
+The API computes a deterministic bucket and returns:
+
+- `valueB` when `bucket < chance`
+- `valueA` otherwise
+
+## Deterministic inputs
+
+For stable `ab_roll` results, pass both:
+
+- `seed`: the input used to calculate the bucket
+- `key`: the identity you want to keep stable
+
+A common pattern is to use the same user id for both fields.
+
+```ts
+const resolved = await client.get("NEW_CHECKOUT", {
+  seed: user.id,
+  key: user.id,
+});
+```
+
+## Current limits
+
+Today, Barekey publicly documents two variable kinds:
+
+- `secret`
+- `ab_roll`
+
+Progressive rollouts are part of the product direction, but they are not documented as live behavior yet.

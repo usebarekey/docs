@@ -1,0 +1,47 @@
+---
+title: "Security model"
+description: "The public security model for Barekey variable storage and runtime resolution."
+---
+
+## Envelope encryption
+
+Barekey uses per-project envelope encryption.
+
+The model is:
+
+```text
+master KEK
+  -> encrypted project DEK
+      -> encrypted variable payloads
+```
+
+Each project has its own DEK.
+Barekey encrypts variable payloads with that DEK.
+The DEK itself is wrapped by the master KEK.
+
+## Plaintext handling
+
+Barekey stores encrypted variable payloads at rest.
+Plaintext is only produced during request handling when a caller is authorized to read or evaluate a variable.
+
+## Auth model
+
+Barekey accepts two auth sources:
+
+- Clerk JWTs for browser and application requests
+- CLI access tokens minted through the device flow
+
+Every request is scoped to the active organization.
+`seed` and `key` influence deterministic evaluation only. They do not grant access.
+
+## Practical guidance
+
+- keep access tokens server-side when you can
+- use stage boundaries to separate environments
+- prefer short-lived access tokens for automation
+- treat pulled dotenv files as secrets once written locally
+
+## What is intentionally not public here
+
+This page describes the product security model, not every internal implementation detail.
+Operational key rotation details and backend internals stay in the engineering design docs.
