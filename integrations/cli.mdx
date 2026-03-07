@@ -1,0 +1,105 @@
+---
+title: "CLI"
+description: "Use the Barekey CLI for login, variable management, and resolved pulls."
+---
+
+## Login
+
+```bash
+barekey auth login
+```
+
+This starts a browser device flow.
+When it completes, the CLI stores the session locally and uses `https://api.barekey.dev` unless you override the base URL.
+
+Inspect the current session:
+
+```bash
+barekey auth whoami
+```
+
+Log out:
+
+```bash
+barekey auth logout
+```
+
+## Target selection
+
+Most variable commands need:
+
+- `--org`
+- `--project`
+- `--stage`
+
+If you omit them, the CLI looks for `barekey.json` in the current directory tree.
+
+```json
+{
+  "org": "acme-1234",
+  "project": "web-4567",
+  "environment": "development"
+}
+```
+
+## Variable commands
+
+Create a new variable:
+
+```bash
+barekey env new DATABASE_URL "postgres://localhost:5432/app"
+```
+
+Upsert a variable:
+
+```bash
+barekey env set DATABASE_URL "postgres://localhost:5432/app"
+```
+
+Create an `ab_roll`:
+
+```bash
+barekey env set NEW_CHECKOUT off --ab on --chance 0.2
+```
+
+List variables:
+
+```bash
+barekey env list
+```
+
+Read one value:
+
+```bash
+barekey env get DATABASE_URL
+```
+
+Read many values:
+
+```bash
+barekey env get-many --names DATABASE_URL,ENABLE_LOGGING
+```
+
+Delete a variable:
+
+```bash
+barekey env delete DATABASE_URL --yes
+```
+
+Pull resolved values:
+
+```bash
+barekey env pull --format dotenv --out .env.local
+```
+
+## Deterministic evaluation from the CLI
+
+Use `--seed` and `--key` with `env get`, `env get-many`, or `env pull` when you need stable `ab_roll` resolution.
+
+```bash
+barekey env get NEW_CHECKOUT --seed user_42 --key user_42
+```
+
+## JSON output
+
+Most read and write commands support `--json` for machine-readable output.

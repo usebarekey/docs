@@ -1,0 +1,48 @@
+---
+title: "Authentication"
+description: "Authenticate Barekey API requests with either a Clerk JWT or a CLI access token."
+---
+
+## Authorization header
+
+Send a bearer token on protected endpoints:
+
+```http
+Authorization: Bearer <token>
+```
+
+## Supported token types
+
+### Clerk JWT
+
+Use a Clerk token for browser or server-side application requests.
+The token must include an active organization context.
+
+### CLI access token
+
+Use a CLI session token for machine or terminal workflows.
+The CLI gets these through the device flow.
+
+## Org scoping
+
+Barekey authorizes requests against the active organization in the token.
+You cannot switch org scope by sending a different `orgSlug` in the body.
+
+## Request IDs
+
+Every response includes or derives a `requestId`.
+You can also send your own value with:
+
+```http
+x-request-id: 6a7ce4c0-4ff5-4905-a87b-f69f1d8db7d6
+```
+
+## Idempotency for evaluation billing
+
+The evaluation endpoints accept an optional request key header:
+
+```http
+x-barekey-request-key: user-42-checkout-experiment
+```
+
+Use it when you retry requests and want a stable logical request identifier.

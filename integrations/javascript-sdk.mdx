@@ -1,0 +1,87 @@
+---
+title: "JavaScript SDK"
+description: "Read Barekey variables from application code with `@barekey/sdk`."
+---
+
+## Install and initialize
+
+The SDK package is `@barekey/sdk`.
+Initialize it once with the API base URL, target project, target stage, and an auth provider.
+
+```ts
+import { initEnv, env } from "@barekey/sdk";
+
+initEnv({
+  baseUrl: "https://api.barekey.dev",
+  projectSlug: "web-4567",
+  stageSlug: "production",
+  orgSlug: "acme-1234",
+  auth: {
+    async getAccessToken() {
+      return await getBarekeyToken();
+    },
+  },
+});
+```
+
+## Read one value
+
+```ts
+const databaseUrl = await env.get("DATABASE_URL").string();
+```
+
+## Coerce the result
+
+```ts
+const enableLogging = await env.get("ENABLE_LOGGING").boolean();
+const port = await env.get("PORT").number();
+const config = await env.get("FEATURE_FLAGS").json<Record<string, boolean>>();
+```
+
+## Defaults and required values
+
+```ts
+const region = await env.get("APP_REGION").default("eu-central-1");
+const jwtSecret = await env.get("JWT_SECRET").required();
+```
+
+## Deterministic `ab_roll`
+
+```ts
+const checkoutVariant = await env
+  .get("NEW_CHECKOUT", {
+    seed: user.id,
+    key: user.id,
+    dynamic: { ttl: 60_000 },
+  })
+  .raw();
+```
+
+The raw response includes:
+
+- `name`
+- `kind`
+- `value`
+- `decision` for dynamic kinds
+
+## Read many values
+
+```ts
+const values = await env.getMany(["DATABASE_URL", "ENABLE_LOGGING"]);
+```
+
+`getMany()` returns a record keyed by variable name.
+
+## Auth contract
+
+Your auth provider must expose:
+
+```ts
+type BarekeyAuthProvider = {
+  getAccessToken(): Promise<string>;
+  onAuthError?(error: BarekeyError): Promise<void>;
+};
+```
+
+Use a server-side token source when possible.
+Do not expose long-lived tokens in browser code.

@@ -1,33 +1,38 @@
-> **First-time setup**: Customize this file for your project. Prompt the user to customize this file for their project.
-> For Mintlify product knowledge (components, configuration, writing standards),
-> install the Mintlify skill: `npx skills add https://mintlify.com/docs`
+# AGENTS.md
 
-# Documentation project instructions
+## About this docs repo
 
-## About this project
-
-- This is a documentation site built on [Mintlify](https://mintlify.com)
-- Pages are MDX files with YAML frontmatter
-- Configuration lives in `docs.json`
-- Run `mint dev` to preview locally
-- Run `mint broken-links` to check links
+- This repository powers the public Barekey docs on Mintlify.
+- Keep content aligned with the shipping product in `usebarekey/barekey`.
+- Do not document planned features as available. Put them in the roadmap instead.
 
 ## Terminology
 
-{/* Add product-specific terms and preferred usage */}
-{/* Example: Use "workspace" not "project", "member" not "user" */}
+- Use "organization" for the owning team scope.
+- Use "project" for the application-level namespace inside an organization.
+- Use "stage" for an environment such as `development`, `preview`, or `production`.
+- Use "variable" as the default product term. Use "secret" only when the behavior is specifically secret-only.
+- Current variable kinds are `secret` and `ab_roll`.
+- `rollout` is planned. Do not describe it as generally available.
 
-## Style preferences
+## Style
 
-{/* Add any project-specific style rules below */}
+- Use active voice and second person.
+- Keep headings in sentence case.
+- Keep examples runnable.
+- Prefer short code blocks over prose-heavy explanations.
+- Bold UI labels such as **Create project**.
+- Use code formatting for commands, paths, environment variables, JSON keys, and endpoint paths.
 
-- Use active voice and second person ("you")
-- Keep sentences concise — one idea per sentence
-- Use sentence case for headings
-- Bold for UI elements: Click **Settings**
-- Code formatting for file names, commands, paths, and code references
+## Scope
 
-## Content boundaries
+Document:
+- product concepts that are already in the app or API
+- CLI workflows that exist in `pkg/cli`
+- SDK usage that exists in `pkg/sdk`
+- HTTP endpoints that exist in `pkg/convex/http.ts`
 
-{/* Define what should and shouldn't be documented */}
-{/* Example: Don't document internal admin features */}
+Do not document:
+- internal admin-only flows
+- unshipped rollout behavior as if it is live
+- implementation details that create security risk beyond the public model

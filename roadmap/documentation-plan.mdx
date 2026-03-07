@@ -1,0 +1,77 @@
+---
+title: "Documentation plan"
+description: "What this docs site should cover next, in order of priority."
+---
+
+## Goal
+
+The docs should explain the product the way teams adopt it:
+
+1. understand the model
+2. authenticate
+3. read and write variables
+4. integrate the SDK or CLI
+5. operate safely in production
+
+## Phase 1: foundations
+
+Status: in progress
+
+Ship and maintain:
+
+- product overview
+- quickstart
+- core concepts
+- JavaScript SDK usage
+- CLI usage
+- HTTP auth and endpoint basics
+
+This phase is now drafted in the repo.
+
+## Phase 2: product workflows
+
+Status: next
+
+Add guides for:
+
+- creating organizations, projects, and stages in the app
+- promoting values between stages
+- using `ab_roll` for experiments
+- local development with pulled dotenv files
+- server-side token handling patterns
+
+## Phase 3: operations and trust
+
+Status: next
+
+Add docs for:
+
+- security and encryption FAQ
+- audit and change history once the product exposes it
+- billing and usage behavior
+- error handling and troubleshooting
+- incident-safe rollback guidance for dynamic values
+
+## Phase 4: deeper reference
+
+Status: later
+
+Add reference material for:
+
+- generated API or OpenAPI docs
+- typegen outputs and language-specific SDKs
+- environment naming conventions
+- migration guides from `.env` files or other secret managers
+- self-serve recipes for CI, preview deploys, and monorepos
+
+## Intentionally deferred until shipped
+
+Do not write full public docs for these yet:
+
+- progressive rollouts as a live variable kind
+- passkeys
+- features that only exist in design docs or roadmap notes
+
+## Working rule
+
+When product behavior changes in `usebarekey/barekey`, update this docs repo in the same change cycle or immediately after.

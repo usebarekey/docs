@@ -1,0 +1,60 @@
+---
+title: "How Barekey works"
+description: "Understand organizations, projects, stages, and how variables are resolved."
+---
+
+## Core model
+
+Barekey scopes data in four layers:
+
+1. organization
+2. project
+3. stage
+4. variable
+
+An organization owns one or more projects.
+A project contains one or more stages.
+A stage contains variables.
+
+## Terms that matter
+
+### Organization
+
+Your team boundary.
+Auth and authorization are tied to the active organization in Clerk.
+
+### Project
+
+A single application or deployable service.
+Projects own the encryption key material used for variables.
+
+### Stage
+
+A named runtime environment such as `development`, `preview`, or `production`.
+The same variable name can exist in different stages with different values.
+
+### Variable
+
+A named value resolved at runtime.
+Variables are stored encrypted at rest and resolved through the API.
+
+## Resolution flow
+
+When a client asks for a variable, Barekey:
+
+1. authenticates the caller
+2. verifies org, project, and stage scope
+3. loads the variable metadata
+4. decrypts the value with the project DEK
+5. resolves the final output for the variable kind
+6. returns plaintext only in the response
+
+## Why stages matter
+
+Stages let you keep the same variable contract across environments while changing the value safely.
+You can keep `DATABASE_URL` in both `development` and `production` without mixing secrets.
+
+## What Barekey does not do
+
+Barekey is not a build-time `.env` replacement only.
+It is a runtime control plane for values your app or tooling needs to resolve on demand.

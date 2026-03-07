@@ -1,33 +1,58 @@
 ---
-title: 'Introduction'
-description: 'Example section for showcasing API endpoints'
+title: "API overview"
+description: "The current Barekey HTTP API for variable evaluation, management, CLI auth, and type manifests."
 ---
 
-<Note>
-  If you're not looking to build API reference documentation, you can delete
-  this section by removing the api-reference folder.
-</Note>
+## Base URL
 
-## Welcome
+Production API requests use:
 
-There are two ways to build API documentation: [OpenAPI](https://mintlify.com/docs/api-playground/openapi/setup) and [MDX components](https://mintlify.com/docs/api-playground/mdx/configuration). For the starter kit, we are using the following OpenAPI specification.
+```text
+https://api.barekey.dev
+```
 
-<Card
-  title="Plant Store Endpoints"
-  icon="leaf"
-  href="https://github.com/mintlify/starter/blob/main/api-reference/openapi.json"
->
-  View the OpenAPI specification file
-</Card>
+## Current endpoint groups
 
-## Authentication
+### Variable evaluation
 
-All API endpoints are authenticated using Bearer tokens and picked up from the specification file.
+- `POST /v1/env/evaluate`
+- `POST /v1/env/evaluate-batch`
+- `POST /v1/env/pull`
+
+### Variable management
+
+- `POST /v1/env/list`
+- `POST /v1/env/write`
+
+### CLI auth
+
+- `POST /v1/cli/device/start`
+- `POST /v1/cli/device/complete`
+- `POST /v1/cli/device/poll`
+- `POST /v1/cli/token/refresh`
+- `POST /v1/cli/logout`
+- `GET /v1/cli/session`
+
+### Tooling
+
+- `GET /v1/typegen/manifest`
+
+## Response shape
+
+Successful responses are JSON.
+Errors return this shape:
 
 ```json
-"security": [
-  {
-    "bearerAuth": []
+{
+  "error": {
+    "code": "UNAUTHORIZED",
+    "message": "A valid Clerk JWT or CLI access token is required.",
+    "requestId": "..."
   }
-]
+}
 ```
+
+## What is not finalized yet
+
+This repo does not yet publish a complete generated OpenAPI reference for the shipped endpoints.
+For now, use the hand-written endpoint docs in this section.
