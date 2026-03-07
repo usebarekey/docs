@@ -1,6 +1,6 @@
 ---
 title: "Barekey documentation"
-description: "Encrypted environment variables, deterministic A/B values, and one API surface for your app and tooling."
+description: "Barekey replaces scattered .env files with encrypted variables for your team, with optional dynamic kinds when you need them."
 ---
 
 ## What Barekey gives you
@@ -9,8 +9,9 @@ Barekey manages runtime configuration for developer teams.
 
 Today, that means:
 
-- encrypted variables with per-project envelope encryption
-- deterministic `ab_roll` values for experiments
+- encrypted variables that replace scattered `.env` files
+- per-project envelope encryption
+- optional `ab_roll` values when you need runtime variation
 - one HTTP API used by the app, the CLI, and the JavaScript SDK
 - Clerk-backed auth for browser and CLI flows
 
@@ -33,8 +34,8 @@ Today, that means:
 
 Use these docs for the features that are available now:
 
-- `secret` variables
-- `ab_roll` variables
+- `secret` variables for the main `.env` replacement workflow
+- `ab_roll` variables as an optional extension
 - CLI device login
 - variable evaluation, listing, writing, and pulling
 - JavaScript SDK reads

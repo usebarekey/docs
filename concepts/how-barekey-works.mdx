@@ -56,5 +56,8 @@ You can keep `DATABASE_URL` in both `development` and `production` without mixin
 
 ## What Barekey does not do
 
-Barekey is not a build-time `.env` replacement only.
-It is a runtime control plane for values your app or tooling needs to resolve on demand.
+Barekey can absolutely be used as a `.env` replacement.
+That is the primary use case.
+
+What it does not do is stop there.
+If you need more later, the same system can also resolve richer variable kinds like `ab_roll`.

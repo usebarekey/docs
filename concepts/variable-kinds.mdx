@@ -1,11 +1,14 @@
 ---
 title: "Variable kinds"
-description: "Use the right Barekey variable type for static secrets and deterministic experiments."
+description: "Start with secrets to replace .env files, then use additional variable kinds only when you need them."
 ---
 
 ## `secret`
 
-Use `secret` for classic environment values.
+Use `secret` for the main Barekey workflow.
+This is the `.env` replacement case.
+
+Use it for classic environment values.
 Examples:
 
 - `DATABASE_URL`
@@ -17,6 +20,7 @@ A `secret` resolves to the stored value.
 ## `ab_roll`
 
 Use `ab_roll` when you want one variable name to return either `valueA` or `valueB`.
+This is an add-on capability, not the baseline product requirement.
 
 Each `ab_roll` stores:
 

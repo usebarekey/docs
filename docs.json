@@ -7,7 +7,7 @@
     "light": "#22C55E",
     "dark": "#15803D"
   },
-  "favicon": "/images/barekey-dark.png",
+  "favicon": "/images/barekey-light.png",
   "navigation": {
     "tabs": [
       {
@@ -120,7 +120,7 @@
       "github": "https://github.com/usebarekey/barekey"
     }
   },
-  "description": "Barekey documentation for encrypted variables, deterministic A/B values, the CLI, the JavaScript SDK, and the HTTP API.",
+  "description": "Barekey documentation for encrypted variables, .env replacement workflows, the CLI, the JavaScript SDK, and optional dynamic kinds.",
   "seo": {
     "metatags": {
       "canonical": "https://docs.barekey.dev"
