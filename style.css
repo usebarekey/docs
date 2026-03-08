@@ -37,66 +37,33 @@ pre code,
 	border-color: rgba(208, 214, 216, 0.13) !important;
 }
 
-/* ─── Code block container ──────────────────────────────────── */
-/* Always dark like the landing page's terminal-style snippet */
-pre,
-[data-rehype-pretty-code-figure] pre,
-[class*="codeblock"],
-.code-block-wrapper {
-	background-color: #161b1d !important;
-	border: 1px solid #394447 !important;
-	padding: 18px 20px !important;
-	overflow-x: auto !important;
-	margin-bottom: 0 !important;
-}
-
-/* ─── Shiki token base ──────────────────────────────────────── */
-/* Override background so the container colour shows through */
+/* ─── Shiki token base — let github-dark/light theme control colours ── */
+/* Only make the shiki element itself transparent so the Mintlify
+   code block container background shows through unobstructed. */
 .shiki,
 .shiki code {
 	background-color: transparent !important;
 }
 
-/* Base text colour when shiki hasn't set a token colour */
-.shiki span {
-	color: var(--shiki-default, #d0d6d8);
-}
-
-html.dark .shiki span {
-	color: var(--shiki-dark, #d0d6d8);
-}
-
-/* ─── Code block filename/tab bar ───────────────────────────── */
-[data-rehype-pretty-code-figure] > [data-rehype-pretty-code-title],
-[class*="code-title"],
-[class*="filename"],
-div[data-language] + [data-filename] {
-	background-color: #22292b !important;
-	border: 1px solid #394447 !important;
-	border-bottom: none !important;
-	padding: 6px 14px !important;
-	font-family: "JetBrains Mono", ui-monospace, monospace !important;
-	font-size: 11.5px !important;
-	color: #67787c !important;
-	letter-spacing: 0 !important;
-}
-
 /* ─── Copy button ───────────────────────────────────────────── */
+/* No border — the icon itself is the affordance. A border around
+   a copy icon makes it look like a second copy icon. */
 [data-rehype-pretty-code-figure] button,
 button[aria-label="Copy"],
 .copy-button {
 	background: transparent !important;
-	border: 1px solid #394447 !important;
-	color: #4b585b !important;
-	padding: 3px 7px !important;
-	font-size: 11px !important;
-	font-family: "JetBrains Mono", monospace !important;
-	transition: border-color 0.15s, color 0.15s !important;
+	border: none !important;
+	box-shadow: none !important;
+	color: #67787c !important;
+	opacity: 0.6 !important;
+	padding: 4px !important;
+	transition: opacity 0.15s !important;
 }
 
 [data-rehype-pretty-code-figure] button:hover,
-button[aria-label="Copy"]:hover {
-	border-color: #67787c !important;
+button[aria-label="Copy"]:hover,
+.copy-button:hover {
+	opacity: 1 !important;
 	color: #d0d6d8 !important;
 }
 

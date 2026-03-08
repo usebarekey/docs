@@ -133,6 +133,12 @@
       "github": "https://github.com/usebarekey/barekey"
     }
   },
+  "codeBlock": {
+    "theme": {
+      "light": "github-light",
+      "dark": "github-dark"
+    }
+  },
   "description": "Barekey documentation for encrypted variables, .env replacement workflows, the CLI, the JavaScript SDK, and optional dynamic kinds.",
   "seo": {
     "metatags": {

@@ -12,9 +12,28 @@ description: Authenticate with the CLI, create a variable, and read it from your
 
 ## 1. Install and authenticate the CLI
 
-```bash
-npm install -g @barekey/cli
-```
+<Tabs>
+  <Tab title="Bun">
+    ```bash
+    bun add -g @barekey/cli
+    ```
+  </Tab>
+  <Tab title="npm">
+    ```bash
+    npm install -g @barekey/cli
+    ```
+  </Tab>
+  <Tab title="pnpm">
+    ```bash
+    pnpm add -g @barekey/cli
+    ```
+  </Tab>
+  <Tab title="yarn">
+    ```bash
+    yarn global add @barekey/cli
+    ```
+  </Tab>
+</Tabs>
 
 Run the device login flow. This opens your browser to authorize the CLI session:
 
@@ -99,11 +118,28 @@ barekey env get DATABASE_URL
 
 Install the SDK:
 
-```bash
-npm install @barekey/sdk
-# or
-bun add @barekey/sdk
-```
+<Tabs>
+  <Tab title="Bun">
+    ```bash
+    bun add @barekey/sdk
+    ```
+  </Tab>
+  <Tab title="npm">
+    ```bash
+    npm install @barekey/sdk
+    ```
+  </Tab>
+  <Tab title="pnpm">
+    ```bash
+    pnpm add @barekey/sdk
+    ```
+  </Tab>
+  <Tab title="yarn">
+    ```bash
+    yarn add @barekey/sdk
+    ```
+  </Tab>
+</Tabs>
 
 Create a Barekey client and fetch a variable at request time:
 
