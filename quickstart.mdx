@@ -1,107 +1,171 @@
 ---
-title: "Quickstart"
-description: "Get a working Barekey setup with the hosted API, the CLI, and the JavaScript SDK."
+title: Quickstart
+description: Authenticate with the CLI, create a variable, and read it from your application in under five minutes.
 ---
 
-## What you need
+## Prerequisites
 
-- a Barekey account
-- an organization selected in the web app
-- a project and stage you can access
-- Node.js or Bun for local SDK examples
+- Node.js 18+ or Bun 1.0+ (for the SDK)
+- A Barekey account — [sign up at barekey.dev](https://barekey.dev)
 
-## 1. Log in with the CLI
+---
+
+## 1. Install and authenticate the CLI
+
+```bash
+npm install -g @barekey/cli
+```
+
+Run the device login flow. This opens your browser to authorize the CLI session:
 
 ```bash
 barekey auth login
 ```
 
-The CLI starts a device flow against `https://api.barekey.dev` by default.
-It opens a browser window and asks you to approve the session for your active organization.
+The CLI prints a short user code and a URL:
 
-Verify the local session:
+```
+Open your browser and visit:
+  https://barekey.dev/auth/device
+
+Enter code: ABCD-1234
+
+Waiting for authorization...
+```
+
+After you approve in the browser, the CLI receives an access token (valid 1 hour) and a refresh token (valid 30 days). The token is stored locally and used automatically for all subsequent commands.
+
+Verify the session:
 
 ```bash
 barekey auth whoami
+# → Authenticated as: your@email.com (org: acme-42)
 ```
 
-## 2. Set your local target
+---
 
-Create a `barekey.json` file in your app directory:
+## 2. Create a `barekey.json` config file
 
-```json
+In your project root, create a `barekey.json` file that tells the CLI and SDK which org, project, and stage to target:
+
+```json barekey.json
 {
-  "org": "acme-1234",
-  "project": "web-4567",
-  "environment": "development"
+  "org": "acme-42",
+  "project": "backend-api-1234",
+  "stage": "development"
 }
 ```
 
-The CLI walks up the current directory tree until it finds this file.
-You can still override any value with `--org`, `--project`, or `--stage`.
+| Field | Type | Description |
+| ------- | ------ | ----------- |
+| `org` | string | Your org slug (visible in the dashboard URL) |
+| `project` | string | Project slug |
+| `stage` | string | Stage name — one of `development`, `staging`, `production` or a custom stage |
 
-## 3. Create a variable
+You can override any of these at runtime using `--org`, `--project`, and `--stage` flags. CLI flags take precedence over `barekey.json`.
+
+---
+
+## 3. Create your first variable
 
 ```bash
-barekey env new DATABASE_URL "postgres://localhost:5432/app"
+barekey env new DATABASE_URL --type string
 ```
 
-Create an `ab_roll` variable:
+Set its value:
 
 ```bash
-barekey env new NEW_CHECKOUT off --ab on --chance 0.2
+barekey env set DATABASE_URL "postgres://localhost:5432/myapp_dev"
 ```
 
-Inspect the stage:
+Confirm it was created:
 
 ```bash
 barekey env list
+# NAME          KIND     TYPE
+# DATABASE_URL  secret   string
 ```
 
-## 4. Read a variable from code
+Read a single value:
 
-Initialize the SDK once:
+```bash
+barekey env get DATABASE_URL
+# postgres://localhost:5432/myapp_dev
+```
 
-```ts
+---
+
+## 4. Read variables in your application
+
+Install the SDK:
+
+```bash
+npm install @barekey/sdk
+# or
+bun add @barekey/sdk
+```
+
+Create a Barekey client and fetch a variable at request time:
+
+```typescript
 import { BarekeyClient } from "@barekey/sdk";
 
-const env = new BarekeyClient({
+const barekey = new BarekeyClient({
   baseUrl: "https://api.barekey.dev",
-  projectSlug: "web-4567",
+  orgSlug: "acme-42",
+  projectSlug: "backend-api-1234",
   stageSlug: "development",
   auth: {
-    async getAccessToken() {
-      return process.env.BAREKEY_ACCESS_TOKEN ?? "";
-    },
+    getAccessToken: async () => process.env.BAREKEY_ACCESS_TOKEN!,
   },
 });
 
-const databaseUrl = await env.get("DATABASE_URL").string();
+// Fetch and coerce to the declared type
+const dbUrl = await barekey.env.get("DATABASE_URL").string();
+console.log(dbUrl); // postgres://localhost:5432/myapp_dev
 ```
 
-Read an `ab_roll` variable deterministically:
+For a server-side integration, the access token is a CLI token (`bk_at_...`) stored in a real environment variable, or a Clerk JWT if your backend already issues those.
 
-```ts
-const checkoutVariant = await env
-  .get("NEW_CHECKOUT", {
-    seed: user.id,
-    key: user.id,
-    dynamic: { ttl: 30_000 },
-  })
-  .string();
-```
+---
 
-## 5. Pull resolved values into a file
+## 5. Pull variables to a local `.env` file
+
+For local development you can pull all variables for a stage to a `.env` file:
 
 ```bash
 barekey env pull --format dotenv --out .env.local
 ```
 
-This resolves each variable for the selected stage and writes a dotenv file.
-For `ab_roll`, use `--seed` and `--key` when you need deterministic output.
+This writes a file like:
+
+```bash .env.local
+DATABASE_URL="postgres://localhost:5432/myapp_dev"
+STRIPE_KEY="sk_test_..."
+```
+
+Add `.env.local` to `.gitignore`. Re-run `barekey env pull` whenever variables change upstream.
+
+<Warning>
+  Pulled `.env` files contain plaintext secrets. Never commit them to version
+  control.
+</Warning>
+
+---
 
 ## Next steps
 
-- Read [how Barekey works](/concepts/how-barekey-works)
-- Learn the [JavaScript SDK](/integrations/javascript-sdk)
-- Review the [environment API](/api-reference/evaluate)
+<CardGroup cols={2}>
+  <Card title="How Barekey works" icon="layer-group" href="/concepts/how-barekey-works">
+    Understand the org → project → stage model in depth.
+  </Card>
+  <Card title="Variable kinds" icon="shuffle" href="/concepts/variable-kinds">
+    Learn about `secret` and `ab_roll` kinds, including deterministic evaluation.
+  </Card>
+  <Card title="Local development" icon="laptop" href="/integrations/local-development">
+    The full pull workflow, `barekey.json` schema, and framework integration.
+  </Card>
+  <Card title="API reference" icon="code" href="/api-reference/introduction">
+    Direct HTTP API — useful for CI/CD, scripts, and non-Node environments.
+  </Card>
+</CardGroup>

@@ -1,0 +1,120 @@
+---
+title: Declared types
+description: The declaredType field tells Barekey what type a variable's value represents. The SDK uses it to coerce values at read time.
+---
+
+Every variable in Barekey stores its value as an encrypted string. The `declaredType` field is an optional annotation that records what type that string represents. It is stored alongside the encrypted value and returned in API responses.
+
+---
+
+## Supported types
+
+| `declaredType` | What the string represents | SDK method |
+|---|---|---|
+| `"string"` | Plain text | `.string()` |
+| `"boolean"` | `"true"` or `"false"` | `.boolean()` |
+| `"int64"` | Integer encoded as a decimal string | `.number()` |
+| `"float"` | Floating-point number encoded as a decimal string | `.number()` |
+| `"date"` | ISO 8601 date-time string | `.string()` (no coercion) |
+| `"json"` | JSON-encoded object or array | `.json<T>()` |
+
+---
+
+## Setting a declared type
+
+**CLI:**
+
+```bash
+barekey env new MAX_CONNECTIONS --type int64
+barekey env set MAX_CONNECTIONS "100"
+
+barekey env new FEATURE_FLAGS --type json
+barekey env set FEATURE_FLAGS '{"darkMode":true,"betaDashboard":false}'
+```
+
+**API write entry:**
+
+```json
+{
+  "name": "MAX_CONNECTIONS",
+  "kind": "secret",
+  "value": "100",
+  "declaredType": "int64"
+}
+```
+
+---
+
+## Using the SDK to coerce values
+
+The SDK's accessor chain reads the stored string and converts it based on the method you call. You don't need to manually parse values.
+
+```typescript
+// Stored value: "100", declaredType: "int64"
+const maxConn = await barekey.env.get("MAX_CONNECTIONS").number();
+// → 100 (number)
+
+// Stored value: "true", declaredType: "boolean"
+const betaEnabled = await barekey.env.get("BETA_ENABLED").boolean();
+// → true (boolean)
+
+// Stored value: '{"darkMode":true}', declaredType: "json"
+const flags = await barekey.env.get("FEATURE_FLAGS").json<{ darkMode: boolean }>();
+// → { darkMode: true }
+
+// Stored value: "postgres://...", declaredType: "string"
+const dbUrl = await barekey.env.get("DATABASE_URL").string();
+// → "postgres://..." (string)
+```
+
+The method you call must match the stored `declaredType`. Calling `.boolean()` on a variable declared as `"json"` will throw at runtime.
+
+---
+
+## What happens without a declared type
+
+`declaredType` is optional. If you omit it, the raw string is stored and returned as-is. The SDK's `.string()` and `.raw()` methods both work — `.boolean()`, `.number()`, and `.json<T>()` will attempt type coercion but may fail if the stored string is not in the expected format.
+
+For new variables, always set `declaredType` explicitly. It makes the API response self-documenting and prevents coercion errors.
+
+---
+
+## The `declaredType` field in API responses
+
+The evaluate endpoint echoes `declaredType` in every response:
+
+```json
+{
+  "name": "MAX_CONNECTIONS",
+  "kind": "secret",
+  "value": "100",
+  "declaredType": "int64",
+  "requestId": "req_..."
+}
+```
+
+The list endpoint includes it in metadata (without the value):
+
+```json
+{
+  "name": "MAX_CONNECTIONS",
+  "kind": "secret",
+  "declaredType": "int64",
+  "createdAtMs": 1700000000000,
+  "updatedAtMs": 1700000000000
+}
+```
+
+---
+
+## Type validation
+
+Barekey validates that the value string is consistent with the `declaredType` at write time:
+
+- `"boolean"` — must be exactly `"true"` or `"false"` (case-sensitive)
+- `"int64"` — must parse as an integer with no decimal point
+- `"float"` — must parse as a floating-point number
+- `"json"` — must be valid JSON (object, array, or primitive)
+- `"string"` and `"date"` — no format validation; any string is accepted
+
+A write that fails validation returns a `400 INVALID_REQUEST` error.

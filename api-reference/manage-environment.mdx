@@ -1,20 +1,34 @@
 ---
-title: "Manage variables"
-description: "List and write variables in a Barekey project stage."
+title: Manage variables
+description: List variable metadata and write (create, update, delete) variables via the HTTP API.
 ---
 
-## `POST /v1/env/list`
+## POST /v1/env/list
 
-List variable metadata for one stage.
+List all variables in a stage. Returns metadata only — no plaintext values are included in this response.
 
-```json
-{
-  "projectSlug": "web-4567",
-  "stageSlug": "production"
-}
+### Request
+
+```bash
+curl -X POST https://api.barekey.dev/v1/env/list \
+  -H "Authorization: Bearer bk_at_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "orgSlug": "acme-42",
+    "projectSlug": "backend-api-1234",
+    "stageSlug": "production"
+  }'
 ```
 
-Success response:
+**Request body fields:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `orgSlug` | `string` | Yes | Org slug |
+| `projectSlug` | `string` | Yes | Project slug |
+| `stageSlug` | `string` | Yes | Stage name |
+
+### Response
 
 ```json
 {
@@ -22,99 +36,160 @@ Success response:
     {
       "name": "DATABASE_URL",
       "kind": "secret",
-      "createdAtMs": 1741350000000,
-      "updatedAtMs": 1741350000000,
-      "chance": null
+      "declaredType": "string",
+      "createdAtMs": 1700000000000,
+      "updatedAtMs": 1700050000000
     },
     {
-      "name": "NEW_CHECKOUT",
+      "name": "CHECKOUT_FLOW",
       "kind": "ab_roll",
-      "createdAtMs": 1741350000000,
-      "updatedAtMs": 1741350000000,
-      "chance": 0.2
-    }
-  ]
-}
-```
-
-## `POST /v1/env/write`
-
-Create, update, or delete variables in one request.
-
-Top-level fields:
-
-- `projectSlug`: required
-- `stageSlug`: required
-- `mode`: `create_only` or `upsert`
-- `entries`: array of `secret` or `ab_roll` writes
-- `deletes`: array of variable names
-
-Create or upsert a `secret`:
-
-```json
-{
-  "projectSlug": "web-4567",
-  "stageSlug": "production",
-  "mode": "upsert",
-  "entries": [
-    {
-      "name": "DATABASE_URL",
-      "kind": "secret",
-      "value": "postgres://..."
+      "declaredType": "string",
+      "chance": 0.2,
+      "createdAtMs": 1700000100000,
+      "updatedAtMs": 1700000100000
     }
   ],
-  "deletes": []
+  "requestId": "req_01hx..."
 }
 ```
 
-Create or upsert an `ab_roll`:
+**Each variable in `variables`:**
+
+| Field | Type | Always present | Description |
+|---|---|---|---|
+| `name` | `string` | Yes | Variable name |
+| `kind` | `"secret"` \| `"ab_roll"` | Yes | Variable kind |
+| `declaredType` | `string` | No | Declared type, if set |
+| `chance` | `number` | `ab_roll` only | Probability of returning value A (0.0–1.0) |
+| `createdAtMs` | `number` | Yes | Unix timestamp in milliseconds |
+| `updatedAtMs` | `number` | Yes | Unix timestamp in milliseconds |
+
+Variables are returned sorted alphabetically by name.
+
+### Error codes
+
+| Code | HTTP | When |
+|---|---|---|
+| `UNAUTHORIZED` | 401 | Invalid or expired token |
+| `INVALID_JSON` | 400 | Request body is not valid JSON |
+| `INVALID_REQUEST` | 400 | Missing required field |
+| `INVALID_ORG_SCOPE` | 403 | Token org doesn't match `orgSlug` |
+
+---
+
+## POST /v1/env/write
+
+Create, update, or delete variables in a single request. All operations in a write request are applied atomically.
+
+### Write modes
+
+The `mode` field controls how existing variables are handled:
+
+| Mode | Behavior |
+|---|---|
+| `"upsert"` | Create new variables and update existing ones. Existing variables not mentioned in `entries` are unchanged. |
+| `"create_only"` | Only create new variables. Returns `INVALID_REQUEST` if any entry refers to a variable that already exists. |
+
+### Request
+
+```bash
+curl -X POST https://api.barekey.dev/v1/env/write \
+  -H "Authorization: Bearer bk_at_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "orgSlug": "acme-42",
+    "projectSlug": "backend-api-1234",
+    "stageSlug": "production",
+    "mode": "upsert",
+    "entries": [
+      {
+        "name": "DATABASE_URL",
+        "kind": "secret",
+        "value": "postgres://rds.example.com:5432/myapp",
+        "declaredType": "string"
+      },
+      {
+        "name": "CHECKOUT_FLOW",
+        "kind": "ab_roll",
+        "valueA": "original",
+        "valueB": "redesigned",
+        "chance": 0.2,
+        "declaredType": "string"
+      }
+    ],
+    "deletes": ["OLD_API_KEY"]
+  }'
+```
+
+**Request body fields:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `orgSlug` | `string` | Yes | Org slug |
+| `projectSlug` | `string` | Yes | Project slug |
+| `stageSlug` | `string` | Yes | Stage name |
+| `mode` | `"upsert"` \| `"create_only"` | Yes | How to handle existing variables |
+| `entries` | `array` | No | Variables to create or update |
+| `deletes` | `string[]` | No | Names of variables to delete |
+
+**Each entry for a `secret` variable:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | `string` | Yes | Variable name |
+| `kind` | `"secret"` | Yes | Must be `"secret"` |
+| `value` | `string` | Yes | Plaintext value |
+| `declaredType` | `string` | No | One of `"string"`, `"boolean"`, `"int64"`, `"float"`, `"date"`, `"json"` |
+
+**Each entry for an `ab_roll` variable:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | `string` | Yes | Variable name |
+| `kind` | `"ab_roll"` | Yes | Must be `"ab_roll"` |
+| `valueA` | `string` | Yes | Plaintext value A |
+| `valueB` | `string` | Yes | Plaintext value B |
+| `chance` | `number` | Yes | Probability of returning A (0.0–1.0) |
+| `declaredType` | `string` | No | Declared type for both values |
+
+### Response
 
 ```json
 {
-  "projectSlug": "web-4567",
-  "stageSlug": "production",
-  "mode": "upsert",
-  "entries": [
-    {
-      "name": "NEW_CHECKOUT",
-      "kind": "ab_roll",
-      "valueA": "off",
-      "valueB": "on",
-      "chance": 0.2
-    }
-  ],
-  "deletes": []
+  "created": ["CHECKOUT_FLOW"],
+  "updated": ["DATABASE_URL"],
+  "deleted": ["OLD_API_KEY"],
+  "requestId": "req_01hx..."
 }
 ```
 
-Delete a variable:
+**Response fields:**
 
-```json
-{
-  "projectSlug": "web-4567",
-  "stageSlug": "production",
-  "mode": "upsert",
-  "entries": [],
-  "deletes": ["DATABASE_URL"]
-}
-```
+| Field | Type | Description |
+|---|---|---|
+| `created` | `string[]` | Names of variables that were created |
+| `updated` | `string[]` | Names of variables that were updated |
+| `deleted` | `string[]` | Names of variables that were deleted |
+| `requestId` | `string` | Request trace ID |
 
-Success response:
+### How writes work
 
-```json
-{
-  "createdCount": 1,
-  "updatedCount": 0,
-  "deletedCount": 0,
-  "requestId": "..."
-}
-```
+Values are encrypted server-side before being committed to the database. The write goes through a two-phase process:
 
-## Common write errors
+1. **Prepare** — all values are encrypted with the project DEK; storage delta is computed
+2. **Reserve** — storage usage is reserved in the billing system
+3. **Commit** — encrypted payloads are written to the database
+4. **Settle** — storage usage is finalized (or rolled back on failure)
 
-- `UNAUTHORIZED`
-- `INVALID_JSON`
-- `INVALID_REQUEST`
-- `WRITE_FAILED`
-- `USAGE_LIMIT_EXCEEDED`
-- `BILLING_UNAVAILABLE`
+This means a write request that fails validation (e.g. `create_only` with an existing name) will not encrypt any values or reserve any billing units.
+
+### Error codes
+
+| Code | HTTP | When |
+|---|---|---|
+| `UNAUTHORIZED` | 401 | Invalid or expired token |
+| `INVALID_JSON` | 400 | Request body is not valid JSON |
+| `INVALID_REQUEST` | 400 | Missing required field, invalid type value, or `create_only` conflict |
+| `INVALID_ORG_SCOPE` | 403 | Token org doesn't match `orgSlug` |
+| `USAGE_LIMIT_EXCEEDED` | 402 | Storage limit reached on the free plan |
+| `BILLING_UNAVAILABLE` | 503 | Billing system temporarily unavailable |

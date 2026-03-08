@@ -1,127 +1,239 @@
 ---
-title: "Evaluate variables"
-description: "Resolve one variable, a batch, or a full stage through the Barekey HTTP API."
+title: Evaluate variables
+description: Evaluate one variable, evaluate a batch, or pull all variables for a stage as a flat key→value map.
 ---
 
-## `POST /v1/env/evaluate`
+## POST /v1/env/evaluate
 
-Resolve one variable.
+Evaluate a single named variable and return its plaintext value. For `ab_roll` variables, the response includes which bucket was selected.
+
+### Request
 
 ```bash
 curl -X POST https://api.barekey.dev/v1/env/evaluate \
-  -H "authorization: Bearer $TOKEN" \
-  -H "content-type: application/json" \
+  -H "Authorization: Bearer bk_at_..." \
+  -H "Content-Type: application/json" \
+  -H "x-barekey-request-key: req_abc123" \
   -d '{
-    "projectSlug": "web-4567",
+    "orgSlug": "acme-42",
+    "projectSlug": "backend-api-1234",
     "stageSlug": "production",
     "name": "DATABASE_URL"
   }'
 ```
 
-Request body:
+**Request body fields:**
 
-- `projectSlug`: required
-- `stageSlug`: required
-- `name`: required
-- `seed`: optional
-- `key`: optional
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `orgSlug` | `string` | Yes | Org slug. Must match the org in the Authorization token. |
+| `projectSlug` | `string` | Yes | Project slug. |
+| `stageSlug` | `string` | Yes | Stage name. |
+| `name` | `string` | Yes | Variable name. |
+| `declaredType` | `string` | No | Expected type — validated against the stored `declaredType`. If provided and mismatching, returns `INVALID_REQUEST`. |
+| `seed` | `string` | No | Seed for deterministic `ab_roll` bucket assignment. |
+| `key` | `string` | No | Namespace key for deterministic evaluation. Used with `seed`. |
 
-Success response:
+### Response
 
 ```json
 {
   "name": "DATABASE_URL",
   "kind": "secret",
-  "value": "postgres://..."
+  "value": "postgres://rds.example.com:5432/myapp",
+  "declaredType": "string",
+  "requestId": "req_01hx..."
 }
 ```
 
-For `ab_roll`, `decision` is included:
+**For `ab_roll` variables:**
 
 ```json
 {
-  "name": "NEW_CHECKOUT",
+  "name": "CHECKOUT_FLOW",
   "kind": "ab_roll",
-  "value": "on",
-  "decision": {
-    "bucket": 0.184,
-    "chance": 0.2,
-    "seed": "user_42",
-    "key": "user_42",
-    "matchedRule": "ab_roll"
-  }
+  "value": "redesigned",
+  "declaredType": "string",
+  "decision": "b",
+  "requestId": "req_01hx..."
 }
 ```
 
-## `POST /v1/env/evaluate-batch`
+**Response fields:**
 
-Resolve a list of variables in one request.
+| Field | Type | Always present | Description |
+|---|---|---|---|
+| `name` | `string` | Yes | Variable name |
+| `kind` | `"secret"` \| `"ab_roll"` | Yes | Variable kind |
+| `value` | `string` | Yes | Plaintext value |
+| `declaredType` | `string` | No | The stored declared type, if set |
+| `decision` | `"a"` \| `"b"` | `ab_roll` only | Which bucket was selected |
+| `requestId` | `string` | Yes | Request trace ID |
 
-```json
-{
-  "projectSlug": "web-4567",
-  "stageSlug": "production",
-  "names": ["DATABASE_URL", "ENABLE_LOGGING"],
-  "seed": "user_42",
-  "key": "user_42"
-}
+### Deterministic A/B evaluation
+
+Pass `seed` and `key` to get a stable bucket assignment for a given user or context. Barekey computes:
+
+```
+SHA-256("ab_roll:{name}:{seed}:{key}")
 ```
 
-Success response:
+The hash is interpreted as a float between 0 and 1 and compared against the variable's `chance` value. The same `seed` + `key` always returns the same bucket for the same variable.
+
+```bash
+curl -X POST https://api.barekey.dev/v1/env/evaluate \
+  -H "Authorization: Bearer bk_at_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "orgSlug": "acme-42",
+    "projectSlug": "backend-api-1234",
+    "stageSlug": "production",
+    "name": "CHECKOUT_FLOW",
+    "seed": "user_abc123",
+    "key": "checkout-experiment-v1"
+  }'
+```
+
+### Error codes
+
+| Code | HTTP | When |
+|---|---|---|
+| `UNAUTHORIZED` | 401 | Invalid or expired token |
+| `INVALID_JSON` | 400 | Request body is not valid JSON |
+| `INVALID_REQUEST` | 400 | Missing required field or type mismatch |
+| `INVALID_ORG_SCOPE` | 403 | Token org doesn't match `orgSlug` |
+| `VARIABLE_NOT_FOUND` | 404 | Variable doesn't exist in this stage |
+| `EVALUATION_FAILED` | 500 | Decryption or resolution error |
+| `USAGE_LIMIT_EXCEEDED` | 402 | Free plan evaluation limit reached |
+| `BILLING_UNAVAILABLE` | 503 | Billing system temporarily unavailable |
+
+---
+
+## POST /v1/env/evaluate-batch
+
+Evaluate multiple variables in a single request. More efficient than calling `/v1/env/evaluate` in a loop — one round trip, one billing event.
+
+### Request
+
+```bash
+curl -X POST https://api.barekey.dev/v1/env/evaluate-batch \
+  -H "Authorization: Bearer bk_at_..." \
+  -H "Content-Type: application/json" \
+  -H "x-barekey-request-key: req_batch_xyz" \
+  -d '{
+    "orgSlug": "acme-42",
+    "projectSlug": "backend-api-1234",
+    "stageSlug": "production",
+    "entries": [
+      { "name": "DATABASE_URL" },
+      { "name": "REDIS_URL" },
+      { "name": "CHECKOUT_FLOW", "seed": "user_abc123", "key": "checkout-v1" }
+    ]
+  }'
+```
+
+**Request body fields:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `orgSlug` | `string` | Yes | Org slug |
+| `projectSlug` | `string` | Yes | Project slug |
+| `stageSlug` | `string` | Yes | Stage name |
+| `entries` | `array` | Yes | List of variable evaluation requests |
+
+**Each entry in `entries`:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | `string` | Yes | Variable name |
+| `declaredType` | `string` | No | Expected type for validation |
+| `seed` | `string` | No | Seed for deterministic `ab_roll` evaluation |
+| `key` | `string` | No | Namespace key (used with `seed`) |
+
+### Response
 
 ```json
 {
-  "values": [
+  "results": [
     {
       "name": "DATABASE_URL",
       "kind": "secret",
-      "value": "postgres://..."
+      "value": "postgres://rds.example.com:5432/myapp",
+      "declaredType": "string"
     },
     {
-      "name": "ENABLE_LOGGING",
+      "name": "REDIS_URL",
       "kind": "secret",
-      "value": "true"
-    }
-  ]
-}
-```
-
-## `POST /v1/env/pull`
-
-Resolve every variable in a stage.
-
-```json
-{
-  "projectSlug": "web-4567",
-  "stageSlug": "production",
-  "seed": "user_42",
-  "key": "user_42"
-}
-```
-
-Success response includes both array and map forms:
-
-```json
-{
-  "values": [
+      "value": "redis://cache.example.com:6379",
+      "declaredType": "string"
+    },
     {
-      "name": "DATABASE_URL",
-      "kind": "secret",
-      "value": "postgres://..."
+      "name": "CHECKOUT_FLOW",
+      "kind": "ab_roll",
+      "value": "redesigned",
+      "declaredType": "string",
+      "decision": "b"
     }
   ],
-  "byName": {
-    "DATABASE_URL": "postgres://..."
-  }
+  "requestId": "req_01hx..."
 }
 ```
 
-## Common error codes
+Results are returned in the same order as the input `entries` array. If one variable is not found, the entire request returns `VARIABLE_NOT_FOUND` — there is no partial success.
 
-- `UNAUTHORIZED`
-- `INVALID_JSON`
-- `INVALID_REQUEST`
-- `VARIABLE_NOT_FOUND`
-- `EVALUATION_FAILED`
-- `USAGE_LIMIT_EXCEEDED`
-- `BILLING_UNAVAILABLE`
+---
+
+## POST /v1/env/pull
+
+Fetch all variables for a stage and return them as a flat `{ [name]: value }` map. Equivalent to `barekey env pull` in the CLI.
+
+This endpoint is designed for local development tooling and scripts that need all variables at once. For production application use, prefer `/v1/env/evaluate` or `/v1/env/evaluate-batch` which scope requests to specific variables.
+
+### Request
+
+```bash
+curl -X POST https://api.barekey.dev/v1/env/pull \
+  -H "Authorization: Bearer bk_at_..." \
+  -H "Content-Type: application/json" \
+  -H "x-barekey-request-key: req_pull_xyz" \
+  -d '{
+    "orgSlug": "acme-42",
+    "projectSlug": "backend-api-1234",
+    "stageSlug": "development"
+  }'
+```
+
+**Request body fields:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `orgSlug` | `string` | Yes | Org slug |
+| `projectSlug` | `string` | Yes | Project slug |
+| `stageSlug` | `string` | Yes | Stage name |
+| `seed` | `string` | No | Seed for deterministic `ab_roll` evaluation across all variables |
+| `key` | `string` | No | Namespace key (used with `seed`) |
+
+### Response
+
+```json
+{
+  "variables": {
+    "DATABASE_URL": "postgres://localhost:5432/myapp_dev",
+    "FEATURE_ENABLED": "true",
+    "CHECKOUT_FLOW": "original"
+  },
+  "requestId": "req_01hx..."
+}
+```
+
+All values are plaintext strings, including `boolean`, `int64`, and `json` declared types — the pull endpoint does not coerce types. The CLI and SDK handle coercion on top of this response.
+
+`ab_roll` variables are evaluated using `seed`/`key` if provided, or randomly if not. There is no `decision` field in pull responses.
+
+### Error codes
+
+The same codes as `/v1/env/evaluate` apply, plus:
+
+| Code | HTTP | When |
+|---|---|---|
+| `EVALUATION_FAILED` | 500 | One or more variables failed to decrypt |

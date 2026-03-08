@@ -1,48 +1,112 @@
 ---
-title: "Authentication"
-description: "Authenticate Barekey API requests with either a Clerk JWT or a CLI access token."
+title: Authentication
+description: How to authenticate against the Barekey HTTP API using a Clerk JWT or a CLI access token.
 ---
 
-## Authorization header
+Every Barekey API request (except `POST /v1/cli/device/start`) requires an `Authorization` header with a Bearer token:
 
-Send a bearer token on protected endpoints:
-
-```http
+```
 Authorization: Bearer <token>
 ```
 
-## Supported token types
+There are two valid token types.
 
-### Clerk JWT
+---
 
-Use a Clerk token for browser or server-side application requests.
-The token must include an active organization context.
+## CLI access token
 
-### CLI access token
+CLI access tokens are issued by the [device code flow](/api-reference/cli-auth) when you run `barekey auth login`. They are the standard way to authenticate server-side integrations, CI/CD pipelines, and SDK usage.
 
-Use a CLI session token for machine or terminal workflows.
-The CLI gets these through the device flow.
+**Format:** `bk_at_` prefix followed by a base64url-encoded random string.
+
+**TTL:** 1 hour. Refresh using `POST /v1/cli/token/refresh` with a refresh token (`bk_rt_...`).
+
+**Example:**
+
+```bash
+curl -X POST https://api.barekey.dev/v1/env/evaluate \
+  -H "Authorization: Bearer bk_at_8f3kLmNpQrSt..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "orgSlug": "acme-42",
+    "projectSlug": "backend-api-1234",
+    "stageSlug": "production",
+    "name": "DATABASE_URL"
+  }'
+```
+
+### Storing CLI tokens
+
+In CI/CD environments, store the access token as a secret in your CI provider (GitHub Actions secrets, Vercel environment variables, etc.). Reference it as an environment variable in your application:
+
+```bash
+# GitHub Actions
+- name: Evaluate secrets
+  env:
+    BAREKEY_TOKEN: ${{ secrets.BAREKEY_ACCESS_TOKEN }}
+  run: |
+    curl -H "Authorization: Bearer $BAREKEY_TOKEN" ...
+```
+
+### Token refresh
+
+When the 1-hour access token expires, use the refresh token to get a new pair:
+
+```bash
+curl -X POST https://api.barekey.dev/v1/cli/token/refresh \
+  -H "Content-Type: application/json" \
+  -d '{"refreshToken": "bk_rt_..."}'
+```
+
+The refresh token is valid for 30 days. Each refresh issues a new access token and a new refresh token — the old refresh token is immediately invalidated (rotation pattern).
+
+---
+
+## Clerk JWT
+
+Clerk JWTs are used by the web dashboard and by server-side applications that already have Clerk sessions. The JWT must carry an **active org claim** — a Clerk session without an active org cannot access the API.
+
+**Example:**
+
+```bash
+curl -X POST https://api.barekey.dev/v1/env/evaluate \
+  -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "orgSlug": "acme-42",
+    "projectSlug": "backend-api-1234",
+    "stageSlug": "production",
+    "name": "DATABASE_URL"
+  }'
+```
+
+Clerk JWTs are short-lived (typically 60 seconds) and are intended for use in browser-based or server-rendered contexts where Clerk manages the session. For long-running server processes, use CLI access tokens instead.
+
+---
 
 ## Org scoping
 
-Barekey authorizes requests against the active organization in the token.
-You cannot switch org scope by sending a different `orgSlug` in the body.
+The org scope is determined by the token, not by request body parameters.
 
-## Request IDs
+- For CLI tokens: the org is fixed at session creation time (when you ran `barekey auth login --org <slug>`).
+- For Clerk JWTs: the org is the active org in the Clerk session.
 
-Every response includes or derives a `requestId`.
-You can also send your own value with:
+**The `orgSlug` in the request body must match the org from the token.** If it doesn't, the request returns `403 ORG_SCOPE_INVALID`. You cannot use a token issued for org A to access org B's variables by changing `orgSlug` in the request body.
 
-```http
-x-request-id: 6a7ce4c0-4ff5-4905-a87b-f69f1d8db7d6
-```
+---
 
-## Idempotency for evaluation billing
+## Token priority
 
-The evaluation endpoints accept an optional request key header:
+If a request provides both a Clerk JWT and a CLI access token (e.g. in a misconfigured client), Barekey processes the Clerk JWT first. The CLI access token is only evaluated if no valid Clerk identity is found.
 
-```http
-x-barekey-request-key: user-42-checkout-experiment
-```
+---
 
-Use it when you retry requests and want a stable logical request identifier.
+## Errors
+
+| Scenario | Code | HTTP |
+|---|---|---|
+| Missing or malformed `Authorization` header | `UNAUTHORIZED` | 401 |
+| Token not found or expired | `UNAUTHORIZED` | 401 |
+| Session revoked | `UNAUTHORIZED` | 401 |
+| Token org doesn't match request `orgSlug` | `INVALID_ORG_SCOPE` | 403 |
+| User removed from org since token was issued | `ORG_SCOPE_INVALID` | 403 |

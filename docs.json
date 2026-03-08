@@ -36,6 +36,8 @@
             "pages": [
               "concepts/how-barekey-works",
               "concepts/variable-kinds",
+              "concepts/stages",
+              "concepts/declared-types",
               "concepts/security-model"
             ]
           },
@@ -43,13 +45,8 @@
             "group": "Integrations",
             "pages": [
               "integrations/javascript-sdk",
-              "integrations/cli"
-            ]
-          },
-          {
-            "group": "Roadmap",
-            "pages": [
-              "roadmap/documentation-plan"
+              "integrations/cli",
+              "integrations/local-development"
             ]
           }
         ]
@@ -76,6 +73,12 @@
             "pages": [
               "api-reference/cli-auth",
               "api-reference/typegen-manifest"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              "api-reference/errors"
             ]
           }
         ]

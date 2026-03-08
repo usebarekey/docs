@@ -1,0 +1,147 @@
+---
+title: Local development
+description: Pull variables to a local .env file, configure barekey.json, and use Barekey variables with Vite, Next.js, and Node.js.
+---
+
+## The pull workflow
+
+The fastest way to use Barekey for local development is `barekey env pull`. This fetches all variables for a stage and writes them to a `.env.local` file that your framework loads automatically.
+
+```bash
+# Authenticate once
+barekey auth login
+
+# Pull development variables
+barekey env pull --format dotenv --out .env.local
+```
+
+Start your dev server normally — Vite, Next.js, and most Node frameworks load `.env.local` automatically.
+
+To refresh variables when they change upstream:
+
+```bash
+barekey env pull --format dotenv --out .env.local
+```
+
+There is no daemon or hot-reload integration — just re-pull when you need updated values.
+
+---
+
+## `barekey.json` configuration
+
+`barekey.json` in your project root tells the CLI which org, project, and stage to target by default. Without it, you must pass `--org`, `--project`, and `--stage` to every command.
+
+```json barekey.json
+{
+  "org": "acme-42",
+  "project": "backend-api-1234",
+  "stage": "development"
+}
+```
+
+### Full schema
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `org` | `string` | Yes | Org slug. Visible in the dashboard URL. |
+| `project` | `string` | Yes | Project slug. |
+| `stage` | `string` | No | Stage name. Defaults to the project's default stage if omitted. |
+
+The CLI searches for `barekey.json` in the current directory and each parent directory up to the filesystem root. This means you can place one file at the monorepo root and have it apply to all subdirectories.
+
+`barekey.json` should be committed to version control — it contains no secrets.
+
+---
+
+## `.gitignore` setup
+
+Add the pull output file to `.gitignore` before running `env pull`:
+
+```bash .gitignore
+.env.local
+.env.staging
+.env*.local
+```
+
+The `barekey.json` config file is safe to commit — it does not contain any secrets or tokens.
+
+---
+
+## Framework integration
+
+### Vite
+
+Vite loads `.env.local` automatically in development mode. No extra configuration needed.
+
+```bash
+barekey env pull --format dotenv --out .env.local
+vite dev
+```
+
+Variables are available as `import.meta.env.VITE_*` if prefixed, or via `loadEnv` for server-side use.
+
+### Next.js
+
+Next.js loads `.env.local` in all environments. Pull and restart the dev server:
+
+```bash
+barekey env pull --format dotenv --out .env.local
+next dev
+```
+
+Variables are available as `process.env.VAR_NAME` in server components, route handlers, and API routes.
+
+For production deployments, use the SDK with a live access token instead of pulling — the pull workflow is intended for local development only.
+
+### Node.js (with `dotenv`)
+
+```typescript
+import "dotenv/config"; // loads .env.local automatically
+// or
+import dotenv from "dotenv";
+dotenv.config({ path: ".env.local" });
+
+// Variables available as process.env.VAR_NAME
+```
+
+---
+
+## Pull vs. always-online SDK
+
+| Approach | When to use |
+|---|---|
+| **Pull to `.env`** | Local development, quick scripts, legacy apps that read `process.env` |
+| **Always-online SDK** | Production servers, edge functions, apps that need fresh values per request |
+
+The pull workflow fetches all values at pull time and freezes them in the file. If a variable changes upstream, you won't see the update until you re-pull. For production, use the SDK to evaluate variables at request time — this ensures you always get the current value.
+
+---
+
+## Deterministic A/B variables in local development
+
+When you pull with `--seed` and `--key`, `ab_roll` variables are evaluated deterministically:
+
+```bash
+barekey env pull --format dotenv --out .env.local \
+  --seed "local-dev" \
+  --key "local"
+```
+
+Without `--seed`, each pull randomizes `ab_roll` values. Use a fixed seed for a stable local experience.
+
+---
+
+## Team setup
+
+Add `barekey.json` to your repo and document the pull step in your `README.md`:
+
+```markdown
+## Setup
+
+1. Install the Barekey CLI: `npm install -g @barekey/cli`
+2. Authenticate: `barekey auth login`
+3. Pull variables: `barekey env pull --format dotenv --out .env.local`
+4. Start the dev server: `npm run dev`
+```
+
+Each team member authenticates with their own Barekey account. Access is controlled by Clerk org membership — add members via the Barekey dashboard.

@@ -1,87 +1,257 @@
 ---
-title: "JavaScript SDK"
-description: "Read Barekey variables from application code with `@barekey/sdk`."
+title: JavaScript SDK
+description: The @barekey/sdk package for Node.js and edge runtimes. Fetches, decrypts, and coerces environment variables at request time.
 ---
 
-## Install and initialize
+## Installation
 
-The SDK package is `@barekey/sdk`.
-Initialize it once with the API base URL, target project, target stage, and an auth provider.
+```bash
+npm install @barekey/sdk
+# or
+bun add @barekey/sdk
+# or
+yarn add @barekey/sdk
+```
 
-```ts
+Requires Node.js 18+ or a runtime with the Web Crypto API and `fetch` (Cloudflare Workers, Deno, Bun, Vercel Edge, etc.).
+
+---
+
+## Creating a client
+
+```typescript
 import { BarekeyClient } from "@barekey/sdk";
 
-const env = new BarekeyClient({
+const barekey = new BarekeyClient({
   baseUrl: "https://api.barekey.dev",
-  projectSlug: "web-4567",
+  orgSlug: "acme-42",
+  projectSlug: "backend-api-1234",
   stageSlug: "production",
-  orgSlug: "acme-1234",
   auth: {
-    async getAccessToken() {
-      return await getBarekeyToken();
-    },
+    getAccessToken: async () => process.env.BAREKEY_ACCESS_TOKEN!,
   },
 });
 ```
 
-## Read one value
+### Constructor options
 
-```ts
-const databaseUrl = await env.get("DATABASE_URL").string();
+| Option | Type | Required | Description |
+|---|---|---|---|
+| `baseUrl` | `string` | Yes | API base URL. Always `https://api.barekey.dev` for production. |
+| `orgSlug` | `string` | Yes | Your org slug (visible in the dashboard URL). |
+| `projectSlug` | `string` | Yes | Project slug. |
+| `stageSlug` | `string` | Yes | Stage name — `development`, `staging`, `production`, or a custom stage. |
+| `auth` | `AuthContract` | Yes | Object with a `getAccessToken` function. See below. |
+
+### Auth contract
+
+```typescript
+interface AuthContract {
+  /**
+   * Called before every API request. Must return a valid Bearer token —
+   * either a CLI access token (bk_at_...) or a Clerk JWT.
+   * The SDK does not cache or refresh tokens — implement rotation here.
+   */
+  getAccessToken: () => Promise<string>;
+
+  /**
+   * Optional. Called when the API returns 401. Use this to clear cached
+   * tokens or redirect to a login screen.
+   */
+  onAuthError?: (error: Error) => void;
+}
 ```
 
-## Coerce the result
+A minimal implementation for a server-side Node.js application:
 
-```ts
-const enableLogging = await env.get("ENABLE_LOGGING").boolean();
-const port = await env.get("PORT").number();
-const config = await env.get("FEATURE_FLAGS").json<Record<string, boolean>>();
+```typescript
+auth: {
+  getAccessToken: async () => {
+    const token = process.env.BAREKEY_ACCESS_TOKEN;
+    if (!token) throw new Error("BAREKEY_ACCESS_TOKEN is not set");
+    return token;
+  },
+}
 ```
 
-## Defaults and required values
+---
 
-```ts
-const region = await env.get("APP_REGION").default("eu-central-1");
-const jwtSecret = await env.get("JWT_SECRET").required();
+## Reading a single variable
+
+`barekey.env.get(name)` returns an accessor object. Call a type method on it to fetch and coerce:
+
+```typescript
+// string
+const dbUrl = await barekey.env.get("DATABASE_URL").string();
+
+// boolean
+const featureEnabled = await barekey.env.get("BETA_ENABLED").boolean();
+
+// number (works for both int64 and float declared types)
+const maxConns = await barekey.env.get("MAX_CONNECTIONS").number();
+
+// JSON object or array
+const flags = await barekey.env.get("FEATURE_FLAGS").json<{ darkMode: boolean }>();
+
+// Raw string — no coercion, returns the stored value as-is
+const raw = await barekey.env.get("DATABASE_URL").raw();
 ```
 
-## Deterministic `ab_roll`
+### Accessor methods
 
-```ts
-const checkoutVariant = await env
-  .get("NEW_CHECKOUT", {
-    seed: user.id,
-    key: user.id,
-    dynamic: { ttl: 60_000 },
-  })
-  .raw();
+| Method | Return type | Behavior |
+|---|---|---|
+| `.string()` | `Promise<string>` | Returns the value as a string. Throws if the request fails. |
+| `.boolean()` | `Promise<boolean>` | Parses `"true"` → `true`, `"false"` → `false`. Throws on any other value. |
+| `.number()` | `Promise<number>` | Parses the value with `Number()`. Throws if the result is `NaN`. |
+| `.json<T>()` | `Promise<T>` | Parses the value with `JSON.parse()`. Throws if the value is not valid JSON. |
+| `.raw()` | `Promise<string>` | Returns the raw string without coercion. |
+| `.default(value)` | accessor | If the variable is not found (404), return `value` instead of throwing. Chain before the type method. |
+| `.required()` | accessor | Throws if the variable is not found. This is the default behavior — `.required()` is a no-op but documents intent. |
+
+### Using `.default()`
+
+```typescript
+// Returns "postgres://localhost/dev" if DATABASE_URL doesn't exist in this stage
+const url = await barekey.env.get("DATABASE_URL").default("postgres://localhost/dev").string();
+
+// Works with any type
+const limit = await barekey.env.get("RATE_LIMIT").default(100).number();
 ```
 
-The raw response includes:
+### Evaluating an `ab_roll` variable with a seed
 
-- `name`
-- `kind`
-- `value`
-- `decision` for dynamic kinds
+```typescript
+const variant = await barekey.env
+  .get("CHECKOUT_FLOW", { seed: userId, key: "checkout-experiment-v1" })
+  .string();
 
-## Read many values
-
-```ts
-const values = await env.getMany(["DATABASE_URL", "ENABLE_LOGGING"]);
+// variant is "original" or "redesigned"
+// The same userId always gets the same variant for this experiment key
 ```
 
-`getMany()` returns a record keyed by variable name.
+---
 
-## Auth contract
+## Reading multiple variables
 
-Your auth provider must expose:
+`barekey.env.getMany(names)` fetches a list of variables in a single API call using the batch endpoint.
 
-```ts
-type BarekeyAuthProvider = {
-  getAccessToken(): Promise<string>;
-  onAuthError?(error: BarekeyError): Promise<void>;
+```typescript
+const [dbUrl, redisUrl, maxConns] = await barekey.env.getMany([
+  { name: "DATABASE_URL" },
+  { name: "REDIS_URL" },
+  { name: "MAX_CONNECTIONS" },
+]);
+
+const db = dbUrl.string();
+const redis = redisUrl.string();
+const limit = maxConns.number();
+```
+
+Each item in the returned array is the same accessor object as `env.get()`. The array preserves the order of the input names.
+
+```typescript
+// With seeds for ab_roll
+const results = await barekey.env.getMany([
+  { name: "CHECKOUT_FLOW", seed: userId, key: "checkout-v1" },
+  { name: "ONBOARDING_FLOW", seed: userId, key: "onboarding-v2" },
+]);
+```
+
+---
+
+## Error handling
+
+The SDK throws on any non-2xx API response. Wrap calls in try/catch for production use:
+
+```typescript
+import { BarekeyError } from "@barekey/sdk";
+
+try {
+  const dbUrl = await barekey.env.get("DATABASE_URL").string();
+} catch (err) {
+  if (err instanceof BarekeyError) {
+    console.error(`Barekey error [${err.code}]: ${err.message}`);
+    // err.code — one of the error codes from the API (e.g. "VARIABLE_NOT_FOUND")
+    // err.status — HTTP status code
+    // err.requestId — the x-request-id from the API response, useful for debugging
+  } else {
+    throw err;
+  }
+}
+```
+
+Common error codes:
+
+| Code | HTTP | When it happens |
+|---|---|---|
+| `UNAUTHORIZED` | 401 | `getAccessToken` returned an invalid or expired token |
+| `VARIABLE_NOT_FOUND` | 404 | The variable doesn't exist in this stage (use `.default()` to handle gracefully) |
+| `INVALID_ORG_SCOPE` | 403 | Token org doesn't match `orgSlug` |
+| `USAGE_LIMIT_EXCEEDED` | 402 | Free plan evaluation limit reached |
+
+---
+
+## TypeScript types
+
+The SDK ships with full TypeScript types. The generic on `.json<T>()` flows through:
+
+```typescript
+interface FeatureFlags {
+  darkMode: boolean;
+  betaDashboard: boolean;
+  maxUploadMb: number;
+}
+
+const flags = await barekey.env.get("FEATURE_FLAGS").json<FeatureFlags>();
+// flags is typed as FeatureFlags
+console.log(flags.darkMode); // boolean
+```
+
+---
+
+## Framework examples
+
+### Next.js (App Router, server component)
+
+```typescript app/layout.tsx
+import { BarekeyClient } from "@barekey/sdk";
+
+const barekey = new BarekeyClient({
+  baseUrl: "https://api.barekey.dev",
+  orgSlug: process.env.BAREKEY_ORG!,
+  projectSlug: process.env.BAREKEY_PROJECT!,
+  stageSlug: process.env.NODE_ENV === "production" ? "production" : "development",
+  auth: {
+    getAccessToken: async () => process.env.BAREKEY_ACCESS_TOKEN!,
+  },
+});
+
+export default async function RootLayout({ children }) {
+  const dbUrl = await barekey.env.get("DATABASE_URL").string();
+  // use dbUrl to initialize your DB connection
+}
+```
+
+### Cloudflare Workers
+
+```typescript worker.ts
+import { BarekeyClient } from "@barekey/sdk";
+
+export default {
+  async fetch(request: Request, env: Env) {
+    const barekey = new BarekeyClient({
+      baseUrl: "https://api.barekey.dev",
+      orgSlug: env.BAREKEY_ORG,
+      projectSlug: env.BAREKEY_PROJECT,
+      stageSlug: "production",
+      auth: {
+        getAccessToken: async () => env.BAREKEY_ACCESS_TOKEN,
+      },
+    });
+
+    const apiKey = await barekey.env.get("THIRD_PARTY_API_KEY").string();
+    // ...
+  },
 };
 ```
-
-Use a server-side token source when possible.
-Do not expose long-lived tokens in browser code.
