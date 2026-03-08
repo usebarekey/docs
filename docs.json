@@ -1,11 +1,11 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "quill",
+  "theme": "maple",
   "name": "Barekey",
   "colors": {
-    "primary": "#334155",
-    "light": "#475569",
-    "dark": "#1E2939"
+    "primary": "#394447",
+    "light": "#4b585b",
+    "dark": "#161b1d"
   },
   "fonts": {
     "heading": { "family": "Google Sans" },
@@ -13,8 +13,8 @@
   },
   "background": {
     "color": {
-      "light": "#F8FAFB",
-      "dark": "#0F1520"
+      "light": "#f9fbfb",
+      "dark": "#090b0c"
     }
   },
   "favicon": "/images/barekey-light.png",

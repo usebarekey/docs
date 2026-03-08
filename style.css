@@ -27,48 +27,43 @@ pre code,
 	font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace !important;
 	font-size: 12.5px !important;
 	padding: 2px 5px !important;
-	background: rgba(71, 85, 105, 0.1) !important;
-	border: 1px solid rgba(71, 85, 105, 0.18) !important;
+	background: rgba(57, 68, 71, 0.09) !important;
+	border: 1px solid rgba(57, 68, 71, 0.18) !important;
 	color: inherit !important;
 }
 
 .dark :not(pre) > code {
-	background: rgba(203, 213, 225, 0.06) !important;
-	border-color: rgba(203, 213, 225, 0.12) !important;
+	background: rgba(208, 214, 216, 0.07) !important;
+	border-color: rgba(208, 214, 216, 0.13) !important;
 }
 
 /* ─── Code block container ──────────────────────────────────── */
+/* Always dark like the landing page's terminal-style snippet */
 pre,
 [data-rehype-pretty-code-figure] pre,
 [class*="codeblock"],
 .code-block-wrapper {
-	background-color: #181E2A !important;
-	border: 1px solid #263046 !important;
+	background-color: #161b1d !important;
+	border: 1px solid #394447 !important;
 	padding: 18px 20px !important;
 	overflow-x: auto !important;
 	margin-bottom: 0 !important;
 }
 
-/* Light mode code blocks — still dark for contrast like the landing */
-pre {
-	background-color: #181E2A !important;
-	border-color: #263046 !important;
-}
-
-/* ─── Shiki token colours: light theme ─────────────────────── */
+/* ─── Shiki token base ──────────────────────────────────────── */
+/* Override background so the container colour shows through */
 .shiki,
-.shiki code,
-.shiki span {
-	background-color: #181E2A !important;
-	color: #CBD5E1 !important;
+.shiki code {
+	background-color: transparent !important;
 }
 
-/* ─── Shiki token colours: dark theme override ─────────────── */
-html.dark .shiki,
-html.dark .shiki code,
+/* Base text colour when shiki hasn't set a token colour */
+.shiki span {
+	color: var(--shiki-default, #d0d6d8);
+}
+
 html.dark .shiki span {
-	background-color: #0F1520 !important;
-	color: var(--shiki-dark, #CBD5E1) !important;
+	color: var(--shiki-dark, #d0d6d8);
 }
 
 /* ─── Code block filename/tab bar ───────────────────────────── */
@@ -76,33 +71,33 @@ html.dark .shiki span {
 [class*="code-title"],
 [class*="filename"],
 div[data-language] + [data-filename] {
-	background-color: #1A2234 !important;
-	border: 1px solid #263046 !important;
+	background-color: #22292b !important;
+	border: 1px solid #394447 !important;
 	border-bottom: none !important;
 	padding: 6px 14px !important;
 	font-family: "JetBrains Mono", ui-monospace, monospace !important;
 	font-size: 11.5px !important;
-	color: #64748B !important;
+	color: #67787c !important;
 	letter-spacing: 0 !important;
 }
 
-/* ─── Copy button in code blocks ────────────────────────────── */
+/* ─── Copy button ───────────────────────────────────────────── */
 [data-rehype-pretty-code-figure] button,
 button[aria-label="Copy"],
 .copy-button {
 	background: transparent !important;
-	border: 1px solid #263046 !important;
-	color: #475569 !important;
+	border: 1px solid #394447 !important;
+	color: #4b585b !important;
 	padding: 3px 7px !important;
 	font-size: 11px !important;
 	font-family: "JetBrains Mono", monospace !important;
-	transition: border-color 0.1s, color 0.1s !important;
+	transition: border-color 0.15s, color 0.15s !important;
 }
 
 [data-rehype-pretty-code-figure] button:hover,
 button[aria-label="Copy"]:hover {
-	border-color: #475569 !important;
-	color: #CBD5E1 !important;
+	border-color: #67787c !important;
+	color: #d0d6d8 !important;
 }
 
 /* ─── Sidebar nav ───────────────────────────────────────────── */
@@ -111,7 +106,7 @@ nav a,
 	font-size: 13.5px !important;
 }
 
-/* ─── Headings — match app's font weight ────────────────────── */
+/* ─── Headings ──────────────────────────────────────────────── */
 h1, h2, h3, h4, h5, h6 {
 	font-family: "Google Sans", sans-serif !important;
 	font-weight: 500 !important;
@@ -145,13 +140,13 @@ th {
 }
 
 td, th {
-	border: 1px solid rgba(71, 85, 105, 0.2) !important;
+	border: 1px solid rgba(57, 68, 71, 0.2) !important;
 	padding: 8px 12px !important;
 }
 
 .dark td,
 .dark th {
-	border-color: rgba(203, 213, 225, 0.08) !important;
+	border-color: rgba(57, 68, 71, 0.5) !important;
 }
 
 /* ─── Body text ─────────────────────────────────────────────── */
