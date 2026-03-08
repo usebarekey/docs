@@ -28,31 +28,43 @@ description: The @barekey/sdk package for Node.js and edge runtimes. Fetches, de
   </Tab>
 </Tabs>
 
-Requires Node.js 18+ or a runtime with the Web Crypto API and `fetch` (Cloudflare Workers, Deno, Bun, Vercel Edge, etc.).
+Requires Node.js 18+ or any runtime with the Web Crypto API and `fetch` — Cloudflare Workers, Deno, Bun, and Vercel Edge all qualify.
 
 ---
 
 ## Creating a client
 
-```typescript
+```typescript lib/barekey.ts
 import { BarekeyClient } from "@barekey/sdk";
 
-const barekey = new BarekeyClient({
+export const barekey = new BarekeyClient({
   baseUrl: "https://api.barekey.dev",
-  orgSlug: "acme-42",
-  projectSlug: "backend-api-1234",
-  stageSlug: "production",
+  orgSlug: process.env.BAREKEY_ORG!,
+  projectSlug: process.env.BAREKEY_PROJECT!,
+  stageSlug: process.env.BAREKEY_STAGE ?? "development",
   auth: {
-    getAccessToken: async () => process.env.BAREKEY_ACCESS_TOKEN!,
+    getAccessToken: async () => {
+      const token = process.env.BAREKEY_ACCESS_TOKEN;
+      if (!token) throw new Error("BAREKEY_ACCESS_TOKEN is not set");
+      return token;
+    },
   },
 });
 ```
+
+Create the client **once at module load** and export it. Instantiating it per-request adds unnecessary overhead — the constructor is synchronous, but the pattern of shared singletons keeps things predictable.
+
+<Note>
+  `BAREKEY_STAGE` lets you decouple the stage from `NODE_ENV`. A common setup
+  is to set `BAREKEY_STAGE=production` in your deployment environment and leave
+  it unset (falling back to `"development"`) locally.
+</Note>
 
 ### Constructor options
 
 | Option | Type | Required | Description |
 |---|---|---|---|
-| `baseUrl` | `string` | Yes | API base URL. Always `https://api.barekey.dev` for production. |
+| `baseUrl` | `string` | Yes | Always `https://api.barekey.dev` for production. |
 | `orgSlug` | `string` | Yes | Your org slug (visible in the dashboard URL). |
 | `projectSlug` | `string` | Yes | Project slug. |
 | `stageSlug` | `string` | Yes | Stage name — `development`, `staging`, `production`, or a custom stage. |
@@ -65,111 +77,139 @@ interface AuthContract {
   /**
    * Called before every API request. Must return a valid Bearer token —
    * either a CLI access token (bk_at_...) or a Clerk JWT.
-   * The SDK does not cache or refresh tokens — implement rotation here.
+   * The SDK does not cache tokens — implement caching or refresh here if needed.
    */
   getAccessToken: () => Promise<string>;
 
   /**
    * Optional. Called when the API returns 401. Use this to clear cached
-   * tokens or redirect to a login screen.
+   * tokens, alert on-call, or trigger a re-authentication flow.
    */
   onAuthError?: (error: Error) => void;
 }
 ```
 
-A minimal implementation for a server-side Node.js application:
+The access token is fetched fresh before every request. If your token is long-lived (e.g. stored as a deployment secret), reading it from `process.env` is fine. If you need token refresh, implement it inside `getAccessToken`:
 
 ```typescript
+// Token refresh example — only relevant if you're managing CLI sessions programmatically
+let cachedToken: string | null = null;
+let expiresAt = 0;
+
 auth: {
   getAccessToken: async () => {
-    const token = process.env.BAREKEY_ACCESS_TOKEN;
-    if (!token) throw new Error("BAREKEY_ACCESS_TOKEN is not set");
-    return token;
+    if (cachedToken && Date.now() < expiresAt - 60_000) {
+      return cachedToken;
+    }
+    const { accessToken, expiresAtMs } = await refreshMyToken();
+    cachedToken = accessToken;
+    expiresAt = expiresAtMs;
+    return cachedToken;
   },
 }
 ```
 
 ---
 
-## Reading a single variable
+## Reading variables
 
-`barekey.env.get(name)` returns an accessor object. Call a type method on it to fetch and coerce:
+### Single variable
 
 ```typescript
 // string
 const dbUrl = await barekey.env.get("DATABASE_URL").string();
 
-// boolean
-const featureEnabled = await barekey.env.get("BETA_ENABLED").boolean();
+// boolean — stored as "true" / "false"
+const maintenanceMode = await barekey.env.get("MAINTENANCE_MODE").boolean();
 
-// number (works for both int64 and float declared types)
-const maxConns = await barekey.env.get("MAX_CONNECTIONS").number();
+// number — works for int64 and float declared types
+const maxConnections = await barekey.env.get("MAX_CONNECTIONS").number();
 
-// JSON object or array
-const flags = await barekey.env.get("FEATURE_FLAGS").json<{ darkMode: boolean }>();
+// JSON object — type parameter flows through
+const flags = await barekey.env.get("FEATURE_FLAGS").json<FeatureFlags>();
 
-// Raw string — no coercion, returns the stored value as-is
-const raw = await barekey.env.get("DATABASE_URL").raw();
+// Raw string — no coercion applied
+const rawCert = await barekey.env.get("TLS_CERT_PEM").raw();
 ```
 
 ### Accessor methods
 
-| Method | Return type | Behavior |
+| Method | Return type | Notes |
 |---|---|---|
-| `.string()` | `Promise<string>` | Returns the value as a string. Throws if the request fails. |
-| `.boolean()` | `Promise<boolean>` | Parses `"true"` → `true`, `"false"` → `false`. Throws on any other value. |
-| `.number()` | `Promise<number>` | Parses the value with `Number()`. Throws if the result is `NaN`. |
-| `.json<T>()` | `Promise<T>` | Parses the value with `JSON.parse()`. Throws if the value is not valid JSON. |
-| `.raw()` | `Promise<string>` | Returns the raw string without coercion. |
-| `.default(value)` | accessor | If the variable is not found (404), return `value` instead of throwing. Chain before the type method. |
-| `.required()` | accessor | Throws if the variable is not found. This is the default behavior — `.required()` is a no-op but documents intent. |
+| `.string()` | `Promise<string>` | Returns the stored value as-is |
+| `.boolean()` | `Promise<boolean>` | `"true"` → `true`, `"false"` → `false`. Throws on any other value |
+| `.number()` | `Promise<number>` | Parsed with `Number()`. Throws if `NaN` |
+| `.json<T>()` | `Promise<T>` | Parsed with `JSON.parse()`. Throws if not valid JSON |
+| `.raw()` | `Promise<string>` | Identical to `.string()` but signals no coercion is expected |
+| `.default(value)` | accessor (chainable) | Returns `value` instead of throwing when the variable is not found |
+| `.required()` | accessor (chainable) | Documents that a missing variable should throw — this is the default |
 
-### Using `.default()`
-
-```typescript
-// Returns "postgres://localhost/dev" if DATABASE_URL doesn't exist in this stage
-const url = await barekey.env.get("DATABASE_URL").default("postgres://localhost/dev").string();
-
-// Works with any type
-const limit = await barekey.env.get("RATE_LIMIT").default(100).number();
-```
-
-### Evaluating an `ab_roll` variable with a seed
+### Fallbacks with `.default()`
 
 ```typescript
-const variant = await barekey.env
-  .get("CHECKOUT_FLOW", { seed: userId, key: "checkout-experiment-v1" })
+// Use a local default if the variable doesn't exist in this stage yet
+const timeout = await barekey.env
+  .get("REQUEST_TIMEOUT_MS")
+  .default(5000)
+  .number();
+
+const logLevel = await barekey.env
+  .get("LOG_LEVEL")
+  .default("info")
   .string();
-
-// variant is "original" or "redesigned"
-// The same userId always gets the same variant for this experiment key
 ```
+
+`.default()` only catches `VARIABLE_NOT_FOUND` (404). Auth errors and decryption failures still throw.
+
+### Batch fetch
+
+`getMany` fetches multiple variables in a single HTTP request:
+
+```typescript
+const [dbUrl, redisUrl, stripeKey] = await barekey.env.getMany([
+  { name: "DATABASE_URL" },
+  { name: "REDIS_URL" },
+  { name: "STRIPE_SECRET_KEY" },
+]);
+
+// Each item is the same accessor — call type methods on it
+const db = dbUrl.string();
+const redis = redisUrl.string();
+const stripe = stripeKey.string();
+```
+
+Use `getMany` at startup to load all config needed to boot your server — one round trip instead of N.
 
 ---
 
-## Reading multiple variables
+## A/B roll variables
 
-`barekey.env.getMany(names)` fetches a list of variables in a single API call using the batch endpoint.
+For variables with `kind: ab_roll`, pass `seed` and `key` to get a stable bucket assignment per user. The same `seed` + `key` always returns the same variant.
 
 ```typescript
-const [dbUrl, redisUrl, maxConns] = await barekey.env.getMany([
-  { name: "DATABASE_URL" },
-  { name: "REDIS_URL" },
-  { name: "MAX_CONNECTIONS" },
-]);
+// Random evaluation — different result per call
+const variant = await barekey.env.get("CHECKOUT_REDESIGN").string();
 
-const db = dbUrl.string();
-const redis = redisUrl.string();
-const limit = maxConns.number();
+// Deterministic evaluation — stable per userId
+const variant = await barekey.env
+  .get("CHECKOUT_REDESIGN", { seed: user.id, key: "checkout-v2" })
+  .string();
+
+if (variant === "treatment") {
+  return renderNewCheckout(cart);
+} else {
+  return renderOriginalCheckout(cart);
+}
 ```
 
-Each item in the returned array is the same accessor object as `env.get()`. The array preserves the order of the input names.
+The `key` acts as an experiment namespace — changing it resets all bucket assignments while keeping the same `seed`. Use a versioned key like `"checkout-v2"` when you want to start a fresh experiment.
+
+Batch `ab_roll` evaluation with different seeds:
 
 ```typescript
-// With seeds for ab_roll
-const results = await barekey.env.getMany([
-  { name: "CHECKOUT_FLOW", seed: userId, key: "checkout-v1" },
-  { name: "ONBOARDING_FLOW", seed: userId, key: "onboarding-v2" },
+const [checkout, onboarding] = await barekey.env.getMany([
+  { name: "CHECKOUT_REDESIGN", seed: user.id, key: "checkout-v2" },
+  { name: "ONBOARDING_FLOW", seed: user.id, key: "onboarding-v1" },
 ]);
 ```
 
@@ -177,96 +217,314 @@ const results = await barekey.env.getMany([
 
 ## Error handling
 
-The SDK throws on any non-2xx API response. Wrap calls in try/catch for production use:
+The SDK throws a `BarekeyError` on any non-2xx response:
 
 ```typescript
-import { BarekeyError } from "@barekey/sdk";
+import { BarekeyClient, BarekeyError } from "@barekey/sdk";
 
 try {
   const dbUrl = await barekey.env.get("DATABASE_URL").string();
 } catch (err) {
   if (err instanceof BarekeyError) {
-    console.error(`Barekey error [${err.code}]: ${err.message}`);
-    // err.code — one of the error codes from the API (e.g. "VARIABLE_NOT_FOUND")
-    // err.status — HTTP status code
-    // err.requestId — the x-request-id from the API response, useful for debugging
+    // err.code    — stable machine-readable code (see /api-reference/errors)
+    // err.status  — HTTP status number
+    // err.message — human-readable description
+    // err.requestId — trace ID from the API, include in bug reports
+
+    if (err.code === "VARIABLE_NOT_FOUND") {
+      // Expected — variable not yet created in this stage
+    } else {
+      throw err;
+    }
   } else {
     throw err;
   }
 }
 ```
 
-Common error codes:
-
-| Code | HTTP | When it happens |
-|---|---|---|
-| `UNAUTHORIZED` | 401 | `getAccessToken` returned an invalid or expired token |
-| `VARIABLE_NOT_FOUND` | 404 | The variable doesn't exist in this stage (use `.default()` to handle gracefully) |
-| `INVALID_ORG_SCOPE` | 403 | Token org doesn't match `orgSlug` |
-| `USAGE_LIMIT_EXCEEDED` | 402 | Free plan evaluation limit reached |
+| Code | When |
+|---|---|
+| `UNAUTHORIZED` | Token is invalid, expired, or revoked |
+| `VARIABLE_NOT_FOUND` | Variable doesn't exist in this stage — use `.default()` to handle gracefully |
+| `INVALID_ORG_SCOPE` | Token org doesn't match `orgSlug` |
+| `USAGE_LIMIT_EXCEEDED` | Free plan evaluation limit reached |
+| `EVALUATION_FAILED` | Decryption error — server-side, retry or contact support with `requestId` |
 
 ---
 
-## TypeScript types
+## Initializing infrastructure at startup
 
-The SDK ships with full TypeScript types. The generic on `.json<T>()` flows through:
+The most common pattern is to load all variables once at server start and use them to initialize long-lived connections:
+
+```typescript lib/bootstrap.ts
+import { barekey } from "./barekey";
+import { Pool } from "pg";
+import Redis from "ioredis";
+import Stripe from "stripe";
+
+export async function bootstrap() {
+  const [dbUrl, redisUrl, stripeKey, smtpPass] = await barekey.env.getMany([
+    { name: "DATABASE_URL" },
+    { name: "REDIS_URL" },
+    { name: "STRIPE_SECRET_KEY" },
+    { name: "SMTP_PASSWORD" },
+  ]);
+
+  const db = new Pool({ connectionString: await dbUrl.string() });
+  const cache = new Redis(await redisUrl.string());
+  const stripe = new Stripe(await stripeKey.string());
+
+  return { db, cache, stripe };
+}
+```
+
+Call `bootstrap()` once when your server starts, then pass the initialized clients through your application context. Don't call the SDK per-request for static config like database URLs — fetch them once and hold the connection.
+
+---
+
+## Feature flags with JSON variables
+
+Store all feature flags as a single JSON variable to minimize API calls:
 
 ```typescript
+// In Barekey dashboard or CLI:
+// barekey env new FEATURE_FLAGS --type json
+// barekey env set FEATURE_FLAGS '{"darkMode":true,"newDashboard":false,"maxUploadMb":25}'
+
 interface FeatureFlags {
   darkMode: boolean;
-  betaDashboard: boolean;
+  newDashboard: boolean;
   maxUploadMb: number;
 }
 
+// Load once at startup
 const flags = await barekey.env.get("FEATURE_FLAGS").json<FeatureFlags>();
-// flags is typed as FeatureFlags
-console.log(flags.darkMode); // boolean
+
+// Use throughout your app
+if (flags.newDashboard) {
+  router.use("/dashboard", newDashboardHandler);
+}
+
+app.post("/upload", (req, res) => {
+  if (req.file.size > flags.maxUploadMb * 1024 * 1024) {
+    return res.status(413).json({ error: "File too large" });
+  }
+});
+```
+
+For flags that need to change without a redeploy, fetch them per-request (or on a short polling interval) rather than at startup.
+
+---
+
+## Testing
+
+Avoid calling Barekey in unit tests. Create a test client that returns mocked values:
+
+```typescript test/helpers/barekey.ts
+import { BarekeyClient } from "@barekey/sdk";
+
+export function createTestClient(overrides: Record<string, string> = {}) {
+  return new BarekeyClient({
+    baseUrl: "http://localhost:9999", // will never be called
+    orgSlug: "test-org",
+    projectSlug: "test-project",
+    stageSlug: "development",
+    auth: {
+      getAccessToken: async () => "test-token",
+    },
+    // Override the fetch implementation to return mock values
+    _fetch: async (_url: string, body: unknown) => {
+      const name = (body as { name: string }).name;
+      const value = overrides[name] ?? `mock-${name}`;
+      return new Response(JSON.stringify({ name, kind: "secret", value }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    },
+  });
+}
+```
+
+Use it in tests:
+
+```typescript
+import { createTestClient } from "./helpers/barekey";
+
+describe("checkout handler", () => {
+  it("uses the database URL from config", async () => {
+    const barekey = createTestClient({
+      DATABASE_URL: "postgres://localhost:5432/test",
+      STRIPE_SECRET_KEY: "sk_test_mock",
+    });
+
+    const handler = createCheckoutHandler({ barekey });
+    const result = await handler(mockRequest);
+    expect(result.status).toBe(200);
+  });
+});
 ```
 
 ---
 
-## Framework examples
+## Framework integration
 
-### Next.js (App Router, server component)
+### Next.js (App Router)
 
-```typescript app/layout.tsx
+Create the client in a shared module. Next.js server components, route handlers, and server actions can all import it:
+
+```typescript lib/barekey.ts
 import { BarekeyClient } from "@barekey/sdk";
 
-const barekey = new BarekeyClient({
+// Module-level singleton — created once per server process
+export const barekey = new BarekeyClient({
   baseUrl: "https://api.barekey.dev",
   orgSlug: process.env.BAREKEY_ORG!,
   projectSlug: process.env.BAREKEY_PROJECT!,
-  stageSlug: process.env.NODE_ENV === "production" ? "production" : "development",
+  stageSlug: process.env.BAREKEY_STAGE ?? "development",
   auth: {
     getAccessToken: async () => process.env.BAREKEY_ACCESS_TOKEN!,
   },
 });
+```
 
-export default async function RootLayout({ children }) {
-  const dbUrl = await barekey.env.get("DATABASE_URL").string();
-  // use dbUrl to initialize your DB connection
+In a server component:
+
+```typescript app/dashboard/page.tsx
+import { barekey } from "@/lib/barekey";
+
+export default async function DashboardPage() {
+  const flags = await barekey.env
+    .get("FEATURE_FLAGS")
+    .json<{ newDashboard: boolean }>();
+
+  return flags.newDashboard ? <NewDashboard /> : <Dashboard />;
 }
+```
+
+In a route handler:
+
+```typescript app/api/checkout/route.ts
+import { barekey } from "@/lib/barekey";
+import Stripe from "stripe";
+
+export async function POST(req: Request) {
+  const userId = getUserId(req);
+
+  const [stripeKey, variant] = await barekey.env.getMany([
+    { name: "STRIPE_SECRET_KEY" },
+    { name: "CHECKOUT_REDESIGN", seed: userId, key: "checkout-v2" },
+  ]);
+
+  const stripe = new Stripe(await stripeKey.string());
+  // use variant.string() to render the right checkout flow
+}
+```
+
+### Express / Hono
+
+Initialize at boot, attach to app context:
+
+```typescript server.ts
+import express from "express";
+import { barekey } from "./lib/barekey";
+
+async function main() {
+  // Load everything needed to boot in one call
+  const [dbUrl, redisUrl] = await barekey.env.getMany([
+    { name: "DATABASE_URL" },
+    { name: "REDIS_URL" },
+  ]);
+
+  const app = express();
+
+  // Attach barekey to locals for per-request use (e.g. A/B flags)
+  app.use((req, _res, next) => {
+    req.app.locals.barekey = barekey;
+    next();
+  });
+
+  app.get("/", async (req, res) => {
+    const variant = await barekey.env
+      .get("HOMEPAGE_VARIANT", { seed: req.cookies.userId, key: "homepage-v1" })
+      .string();
+
+    res.render("home", { variant });
+  });
+
+  await app.listen(3000);
+  console.log("Server running on :3000");
+}
+
+main();
 ```
 
 ### Cloudflare Workers
 
-```typescript worker.ts
+Workers don't have a persistent module scope, so create the client inside the fetch handler. Pass the Worker's `env` bindings as the token source:
+
+```typescript src/worker.ts
 import { BarekeyClient } from "@barekey/sdk";
 
+interface Env {
+  BAREKEY_ORG: string;
+  BAREKEY_PROJECT: string;
+  BAREKEY_STAGE: string;
+  BAREKEY_ACCESS_TOKEN: string;
+}
+
 export default {
-  async fetch(request: Request, env: Env) {
+  async fetch(request: Request, env: Env): Promise<Response> {
     const barekey = new BarekeyClient({
       baseUrl: "https://api.barekey.dev",
       orgSlug: env.BAREKEY_ORG,
       projectSlug: env.BAREKEY_PROJECT,
-      stageSlug: "production",
+      stageSlug: env.BAREKEY_STAGE,
       auth: {
         getAccessToken: async () => env.BAREKEY_ACCESS_TOKEN,
       },
     });
 
-    const apiKey = await barekey.env.get("THIRD_PARTY_API_KEY").string();
-    // ...
+    const [apiKey, rateLimit] = await barekey.env.getMany([
+      { name: "UPSTREAM_API_KEY" },
+      { name: "RATE_LIMIT_RPS" },
+    ]);
+
+    // use them in your handler...
+    return new Response("ok");
   },
 };
+```
+
+Store `BAREKEY_ACCESS_TOKEN` as an encrypted Worker secret via `wrangler secret put BAREKEY_ACCESS_TOKEN`.
+
+### Remix
+
+```typescript app/utils/barekey.server.ts
+// .server.ts — Remix excludes this from the client bundle
+import { BarekeyClient } from "@barekey/sdk";
+
+export const barekey = new BarekeyClient({
+  baseUrl: "https://api.barekey.dev",
+  orgSlug: process.env.BAREKEY_ORG!,
+  projectSlug: process.env.BAREKEY_PROJECT!,
+  stageSlug: process.env.BAREKEY_STAGE ?? "development",
+  auth: {
+    getAccessToken: async () => process.env.BAREKEY_ACCESS_TOKEN!,
+  },
+});
+```
+
+In a loader:
+
+```typescript app/routes/checkout.tsx
+import { barekey } from "~/utils/barekey.server";
+
+export async function loader({ request }: LoaderFunctionArgs) {
+  const userId = await getUserId(request);
+  const variant = await barekey.env
+    .get("CHECKOUT_REDESIGN", { seed: userId, key: "checkout-v2" })
+    .string();
+
+  return json({ variant });
+}
 ```

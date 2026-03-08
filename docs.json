@@ -45,6 +45,7 @@
             "group": "Integrations",
             "pages": [
               "integrations/javascript-sdk",
+              "integrations/patterns",
               "integrations/cli",
               "integrations/local-development"
             ]
