@@ -1,47 +1,101 @@
 ---
-title: "Security model"
-description: "The public security model for Barekey variable storage and runtime resolution."
+title: Security model
+description: How Barekey encrypts secrets, hashes tokens, and what is and isn't protected by the system.
 ---
 
-## Envelope encryption
+## Encryption architecture
 
-Barekey uses per-project envelope encryption.
+Barekey uses **envelope encryption** with AES-GCM-256 throughout. There are two layers:
 
-The model is:
-
-```text
-master KEK
-  -> encrypted project DEK
-      -> encrypted variable payloads
+```
+BAREKEY_MASTER_KEY_B64  ← 256-bit AES-GCM key, stored as env variable outside the DB
+        │
+        └── encrypts ──► Project DEK  ← stored encrypted in the projectKeys table
+                                │
+                                └── encrypts ──► Variable value  ← stored encrypted in projectVariables
 ```
 
-Each project has its own DEK.
-Barekey encrypts variable payloads with that DEK.
-The DEK itself is wrapped by the master KEK.
+### Master KEK
 
-## Plaintext handling
+The master key encryption key (KEK) is a 32-byte AES-GCM key stored as a base64-encoded environment variable named `BAREKEY_MASTER_KEY_B64`. It is never stored in the database. It lives in the Convex environment and is loaded at runtime when a DEK needs to be unwrapped.
 
-Barekey stores encrypted variable payloads at rest.
-Plaintext is only produced during request handling when a caller is authorized to read or evaluate a variable.
+### Per-project DEK
 
-## Auth model
+Every project has a data encryption key (DEK). The DEK is generated once per project (on first use) and is stored encrypted under the master KEK in the `projectKeys` table.
 
-Barekey accepts two auth sources:
+The DEK is never cached — it is loaded and unwrapped from the database on every request that requires decryption, then discarded immediately after use. Multiple DEK rows can exist per project to support key rotation.
 
-- Clerk JWTs for browser and application requests
-- CLI access tokens minted through the device flow
+### Variable encryption
 
-Every request is scoped to the active organization.
-`seed` and `key` influence deterministic evaluation only. They do not grant access.
+Each variable value (or A/B values for `ab_roll`) is encrypted individually using the project DEK with AES-GCM-256. The stored format is:
 
-## Practical guidance
+```
+base64(iv) + "." + base64(ciphertext)
+```
 
-- keep access tokens server-side when you can
-- use stage boundaries to separate environments
-- prefer short-lived access tokens for automation
-- treat pulled dotenv files as secrets once written locally
+The IV (initialization vector) is 12 bytes of cryptographically random data, generated fresh for every encryption operation. Reusing IVs with the same key would be a critical vulnerability — Barekey generates a new IV on every write.
 
-## What is intentionally not public here
+---
 
-This page describes the product security model, not every internal implementation detail.
-Operational key rotation details and backend internals stay in the engineering design docs.
+## What is never stored in plaintext
+
+| Data | How it is stored |
+|---|---|
+| Variable values | AES-GCM encrypted under the project DEK |
+| Project DEKs | AES-GCM encrypted under the master KEK |
+| CLI device codes | SHA-256 hash (base64url encoded) |
+| CLI access tokens (`bk_at_...`) | SHA-256 hash |
+| CLI refresh tokens (`bk_rt_...`) | SHA-256 hash |
+
+Device codes and tokens are returned to the client exactly once (at creation or successful poll). After that, only the hash is kept. There is no way to recover a token from the database.
+
+---
+
+## Token lifecycle
+
+### CLI access tokens
+
+- Generated as 32 bytes of random data, prefixed with `bk_at_`
+- Valid for **1 hour**
+- On use, the hash is looked up in the `cliSessions` table; `lastUsedAtMs` is updated
+- If the token is expired or the session is revoked, the request returns `401 UNAUTHORIZED`
+
+### CLI refresh tokens
+
+- Prefixed with `bk_rt_`
+- Valid for **30 days**
+- Rotation: each refresh operation issues a new access token and a new refresh token. The old refresh token is invalidated immediately. This is a standard token rotation pattern — a stolen refresh token can only be used once before the legitimate client invalidates it.
+
+### Session revocation
+
+Revoking a session via `barekey auth logout` or `POST /v1/cli/logout` sets a `revokedAtMs` timestamp. All subsequent requests using any token from that session return `401 UNAUTHORIZED`. Revocation is immediate.
+
+If a user is removed from an org in Clerk, the next token refresh verifies membership. If membership has been revoked, the session is revoked automatically and the token is invalidated.
+
+---
+
+## Authentication paths
+
+There are two valid authentication paths for the HTTP API:
+
+**1. Clerk JWT** — for web dashboard and server-side integrations where your application already has Clerk sessions. The token must carry an active org claim. The org scope in the token is authoritative — you cannot use a token issued for org A to access org B's variables.
+
+**2. CLI access token** — issued by the device code flow. The session records `orgId` and `orgSlug` at the time of login. On every token refresh, Barekey re-verifies the user's Clerk org membership to ensure access hasn't been revoked.
+
+---
+
+## What Barekey protects — and what it doesn't
+
+**Protected:**
+
+- Variable values are encrypted at rest. A database dump does not expose plaintext values without the master KEK.
+- Auth tokens are never stored in recoverable form. A database dump does not expose live tokens.
+- Stage isolation is enforced at the database query level — a valid token for `development` cannot read `production` values.
+- Org scope is enforced on every request — tokens can only access the org they were issued for.
+
+**Not protected (out of scope):**
+
+- **The master KEK** — if the environment variable `BAREKEY_MASTER_KEY_B64` is compromised, all project DEKs can be decrypted. Protect this key like a root credential.
+- **Values in transit** — HTTPS protects transit, but your application receives plaintext in the response body. Log sanitization is your responsibility.
+- **Local `.env` files** — pulled files contain plaintext. Add them to `.gitignore` and don't commit them.
+- **Insider threats** — Barekey does not prevent an authorized org member from reading or overwriting variables they have access to.

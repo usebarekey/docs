@@ -1,0 +1,123 @@
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap");
+
+/* ─── Sharp corners everywhere ─────────────────────────────── */
+*,
+*::before,
+*::after {
+	border-radius: 0 !important;
+}
+
+/* ─── Code font ─────────────────────────────────────────────── */
+code,
+pre,
+pre code,
+[class*="language-"],
+.shiki,
+.shiki code,
+[data-rehype-pretty-code-figure] pre,
+[data-rehype-pretty-code-figure] code {
+	font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace !important;
+	font-size: 13px !important;
+	line-height: 1.65 !important;
+	letter-spacing: 0 !important;
+}
+
+/* ─── Inline code ───────────────────────────────────────────── */
+:not(pre) > code {
+	font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace !important;
+	font-size: 12.5px !important;
+	padding: 2px 5px !important;
+	background: rgba(57, 68, 71, 0.09) !important;
+	border: 1px solid rgba(57, 68, 71, 0.18) !important;
+	color: inherit !important;
+}
+
+.dark :not(pre) > code {
+	background: rgba(208, 214, 216, 0.07) !important;
+	border-color: rgba(208, 214, 216, 0.13) !important;
+}
+
+/* ─── Shiki token base — let github-dark/light theme control colours ── */
+/* Only make the shiki element itself transparent so the Mintlify
+   code block container background shows through unobstructed. */
+.shiki,
+.shiki code {
+	background-color: transparent !important;
+}
+
+/* ─── Copy button ───────────────────────────────────────────── */
+/* No border — the icon itself is the affordance. A border around
+   a copy icon makes it look like a second copy icon. */
+[data-rehype-pretty-code-figure] button,
+button[aria-label="Copy"],
+.copy-button {
+	background: transparent !important;
+	border: none !important;
+	box-shadow: none !important;
+	color: #67787c !important;
+	opacity: 0.6 !important;
+	padding: 4px !important;
+	transition: opacity 0.15s !important;
+}
+
+[data-rehype-pretty-code-figure] button:hover,
+button[aria-label="Copy"]:hover,
+.copy-button:hover {
+	opacity: 1 !important;
+	color: #d0d6d8 !important;
+}
+
+/* ─── Sidebar nav ───────────────────────────────────────────── */
+nav a,
+[class*="sidebar"] a {
+	font-size: 13.5px !important;
+}
+
+/* ─── Headings ──────────────────────────────────────────────── */
+h1, h2, h3, h4, h5, h6 {
+	font-family: "Google Sans", sans-serif !important;
+	font-weight: 500 !important;
+	letter-spacing: -0.01em !important;
+}
+
+h1 { font-size: 1.625rem !important; }
+h2 { font-size: 1.25rem !important; }
+h3 { font-size: 1.05rem !important; }
+
+/* ─── Callout / note cards ──────────────────────────────────── */
+[class*="callout"],
+[class*="note"],
+[class*="warning"],
+[class*="tip"],
+[class*="info"] {
+	border-left-width: 2px !important;
+}
+
+/* ─── Tables ─────────────────────────────────────────────────── */
+table {
+	border-collapse: collapse !important;
+	font-size: 13.5px !important;
+}
+
+th {
+	font-weight: 500 !important;
+	text-transform: none !important;
+	letter-spacing: 0 !important;
+	font-size: 12.5px !important;
+}
+
+td, th {
+	border: 1px solid rgba(57, 68, 71, 0.2) !important;
+	padding: 8px 12px !important;
+}
+
+.dark td,
+.dark th {
+	border-color: rgba(57, 68, 71, 0.5) !important;
+}
+
+/* ─── Body text ─────────────────────────────────────────────── */
+p, li {
+	font-size: 14.5px !important;
+	line-height: 1.7 !important;
+}

@@ -1,0 +1,139 @@
+---
+title: Error codes
+description: Complete reference for every error code returned by the Barekey HTTP API.
+---
+
+All Barekey API errors use this response shape:
+
+```json
+{
+  "error": {
+    "code": "VARIABLE_NOT_FOUND",
+    "message": "No variable named 'DATABASE_URL' found in stage 'development'.",
+    "requestId": "req_01hx..."
+  }
+}
+```
+
+The `code` field is stable and machine-readable. The `message` field is human-readable and may change between releases — don't parse it.
+
+---
+
+## Error code reference
+
+### Authentication and authorization
+
+| Code | HTTP | Description |
+|---|---|---|
+| `UNAUTHORIZED` | 401 | The `Authorization` header is missing, malformed, or contains a token that is invalid, expired, or revoked. |
+| `INVALID_ORG_SCOPE` | 403 | The `orgSlug` in the request body does not match the org recorded in the token. |
+| `ORG_SCOPE_INVALID` | 403 | The user's org membership was revoked in Clerk after the session was created. The session is permanently invalidated — the user must re-authenticate. |
+
+### Request validation
+
+| Code | HTTP | Description |
+|---|---|---|
+| `INVALID_JSON` | 400 | The request body could not be parsed as JSON. Check the `Content-Type: application/json` header and body format. |
+| `INVALID_REQUEST` | 400 | The request body parsed successfully but failed validation — a required field is missing, a field has the wrong type, or a constraint was violated (e.g. `create_only` mode with an existing variable name, or a `chance` value outside `0.0–1.0`). |
+
+### Variables
+
+| Code | HTTP | Description |
+|---|---|---|
+| `VARIABLE_NOT_FOUND` | 404 | No variable with the requested name exists in the specified stage. In the SDK, handle this with `.default(value)` to avoid throwing. |
+| `EVALUATION_FAILED` | 500 | A variable was found but could not be decrypted or resolved. This is a server-side error — retry the request. If it persists, contact support with the `requestId`. |
+
+### Billing and usage
+
+| Code | HTTP | Description |
+|---|---|---|
+| `USAGE_LIMIT_EXCEEDED` | 402 | The org has reached the evaluation or storage limit for the free plan. Upgrade to a paid plan to continue. |
+| `BILLING_UNAVAILABLE` | 503 | The billing system is temporarily unavailable. The request was not processed. Retry with exponential backoff. |
+
+### CLI device flow
+
+| Code | HTTP | Description |
+|---|---|---|
+| `DEVICE_CODE_NOT_FOUND` | 404 | No device code was found for the provided `deviceCode` or `userCode`. The code may have already been exchanged or never existed. |
+| `DEVICE_CODE_EXPIRED` | 410 | The device code expired before being approved. Device codes are valid for 10 minutes. Start a new flow with `/v1/cli/device/start`. |
+| `USER_CODE_INVALID` | 400 | The `userCode` provided to `/v1/cli/device/complete` is not in the expected format (8 uppercase alphanumeric characters). |
+
+### Token management
+
+| Code | HTTP | Description |
+|---|---|---|
+| `INVALID_REFRESH_TOKEN` | 401 | The refresh token provided to `/v1/cli/token/refresh` is not found, has expired (30-day TTL), or has already been used (rotation: each refresh invalidates the old token). Start a new device flow to get a fresh token pair. |
+
+---
+
+## Handling errors in code
+
+### SDK
+
+The SDK throws a `BarekeyError` on any non-2xx response:
+
+```typescript
+import { BarekeyError } from "@barekey/sdk";
+
+try {
+  const value = await barekey.env.get("DATABASE_URL").string();
+} catch (err) {
+  if (err instanceof BarekeyError) {
+    switch (err.code) {
+      case "VARIABLE_NOT_FOUND":
+        // expected — variable not yet created in this stage
+        return defaultValue;
+      case "UNAUTHORIZED":
+        // token expired — refresh or re-authenticate
+        await refreshToken();
+        break;
+      case "USAGE_LIMIT_EXCEEDED":
+        // billing limit — alert and degrade gracefully
+        logger.warn("Barekey evaluation limit exceeded");
+        return fallback;
+      default:
+        throw err;
+    }
+  }
+  throw err;
+}
+```
+
+### HTTP / curl
+
+Check the `error.code` field in the response body:
+
+```bash
+response=$(curl -s -X POST https://api.barekey.dev/v1/env/evaluate \
+  -H "Authorization: Bearer bk_at_..." \
+  -H "Content-Type: application/json" \
+  -d '{"orgSlug":"acme-42","projectSlug":"backend-api-1234","stageSlug":"production","name":"DATABASE_URL"}')
+
+code=$(echo "$response" | jq -r '.error.code // empty')
+if [ -n "$code" ]; then
+  echo "Error: $code"
+  exit 1
+fi
+
+value=$(echo "$response" | jq -r '.value')
+```
+
+---
+
+## Retry guidance
+
+| Code | Retry? |
+|---|---|
+| `UNAUTHORIZED` | No — obtain a new token first |
+| `INVALID_ORG_SCOPE` | No — fix the request |
+| `ORG_SCOPE_INVALID` | No — user must re-authenticate |
+| `INVALID_JSON` | No — fix the request body |
+| `INVALID_REQUEST` | No — fix the request fields |
+| `VARIABLE_NOT_FOUND` | No — the variable doesn't exist |
+| `EVALUATION_FAILED` | Yes — retry with backoff; escalate if persistent |
+| `USAGE_LIMIT_EXCEEDED` | No — upgrade plan |
+| `BILLING_UNAVAILABLE` | Yes — retry with exponential backoff |
+| `DEVICE_CODE_NOT_FOUND` | No — start a new device flow |
+| `DEVICE_CODE_EXPIRED` | No — start a new device flow |
+| `USER_CODE_INVALID` | No — fix the user code |
+| `INVALID_REFRESH_TOKEN` | No — start a new device flow |

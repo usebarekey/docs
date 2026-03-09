@@ -1,58 +1,111 @@
 ---
-title: "API overview"
-description: "The current Barekey HTTP API for variable evaluation, management, CLI auth, and type manifests."
+title: API overview
+description: Base URL, endpoint groups, request conventions, and the headers used by the Barekey HTTP API.
 ---
 
 ## Base URL
 
-Production API requests use:
-
-```text
+```
 https://api.barekey.dev
 ```
 
-## Current endpoint groups
+All endpoints are versioned under `/v1`. Every request and response body is JSON. This is a hand-written API reference — there is no generated OpenAPI spec.
+
+---
+
+## Endpoint groups
 
 ### Variable evaluation
 
-- `POST /v1/env/evaluate`
-- `POST /v1/env/evaluate-batch`
-- `POST /v1/env/pull`
+Used by applications and the SDK to read variable values at request time.
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/v1/env/evaluate` | Evaluate a single variable |
+| `POST` | `/v1/env/evaluate-batch` | Evaluate multiple variables in one request |
+| `POST` | `/v1/env/pull` | Fetch all variables for a stage as a flat key→value map |
 
 ### Variable management
 
-- `POST /v1/env/list`
-- `POST /v1/env/write`
+Used by the CLI and dashboard to create, update, list, and delete variables.
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/v1/env/list` | List variable metadata for a stage (no plaintext values) |
+| `POST` | `/v1/env/write` | Create or update variables; delete by name |
 
 ### CLI auth
 
-- `POST /v1/cli/device/start`
-- `POST /v1/cli/device/complete`
-- `POST /v1/cli/device/poll`
-- `POST /v1/cli/token/refresh`
-- `POST /v1/cli/logout`
-- `GET /v1/cli/session`
+Used by the CLI to establish and manage authenticated sessions via the device code flow.
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/v1/cli/device/start` | Start a new device authorization flow |
+| `POST` | `/v1/cli/device/complete` | Approve a pending device code (called from the browser) |
+| `POST` | `/v1/cli/device/poll` | Poll for authorization status (called by the CLI) |
+| `POST` | `/v1/cli/token/refresh` | Rotate an expired access token using a refresh token |
+| `POST` | `/v1/cli/logout` | Revoke a session |
+| `GET` | `/v1/cli/session` | Inspect the current session associated with a token |
 
 ### Tooling
 
-- `GET /v1/typegen/manifest`
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/v1/typegen/manifest` | Fetch variable metadata for type generation tools |
+
+---
+
+## Request conventions
+
+**Content-Type:** All `POST` requests must include `Content-Type: application/json`.
+
+**Authorization:** All endpoints except `/v1/cli/device/start` require an `Authorization: Bearer <token>` header. See [Authentication](/api-reference/authentication) for the two token types.
+
+**Request body:** All `POST` endpoints accept a JSON body. Required fields are documented per endpoint.
+
+**CORS:** All endpoints respond to `OPTIONS` preflight requests with appropriate CORS headers.
+
+---
+
+## Headers
+
+### `x-request-id`
+
+An optional client-supplied request ID for tracing. If provided, it is echoed back in every response under the `requestId` field. If not provided, Barekey generates one.
+
+```bash
+curl -H "x-request-id: my-trace-id-123" ...
+```
+
+### `x-barekey-request-key`
+
+An idempotency key for evaluation and pull requests. Barekey uses this to deduplicate billing events — if the same key is sent twice within a short window, the second request is not billed again.
+
+Use a stable, unique key per logical evaluation event (e.g. a request ID from your application):
+
+```bash
+curl -H "x-barekey-request-key: req_abc123" \
+     -H "Authorization: Bearer bk_at_..." ...
+```
+
+The request key must be unique per billing event. Reusing the same key for genuinely different requests will result in under-billing and may cause unexpected behavior.
+
+---
 
 ## Response shape
 
-Successful responses are JSON.
-Errors return this shape:
+All successful responses return JSON with at minimum a `requestId` field.
+
+All error responses follow this shape:
 
 ```json
 {
   "error": {
-    "code": "UNAUTHORIZED",
-    "message": "A valid Clerk JWT or CLI access token is required.",
-    "requestId": "..."
+    "code": "VARIABLE_NOT_FOUND",
+    "message": "No variable named 'DATABASE_URL' found in stage 'development'.",
+    "requestId": "req_01hx..."
   }
 }
 ```
 
-## What is not finalized yet
-
-This repo does not yet publish a complete generated OpenAPI reference for the shipped endpoints.
-For now, use the hand-written endpoint docs in this section.
+See [Error codes](/api-reference/errors) for the full list of codes and their HTTP statuses.

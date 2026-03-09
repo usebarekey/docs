@@ -1,52 +1,50 @@
 ---
-title: "Barekey documentation"
-description: "Barekey replaces scattered .env files with encrypted variables for your team, with optional dynamic kinds when you need them."
+title: Barekey
+description: Encrypted environment variables for developer teams. Manage secrets across orgs, projects, and stages with a type-safe SDK, a CLI, and a direct HTTP API.
 ---
 
-## What Barekey gives you
-
-Barekey manages runtime configuration for developer teams.
-
-Today, that means:
-
-- encrypted variables that replace scattered `.env` files
-- per-project envelope encryption
-- optional `ab_roll` values when you need runtime variation
-- one HTTP API used by the app, the CLI, and the JavaScript SDK
-- Clerk-backed auth for browser and CLI flows
+Barekey stores and serves encrypted environment variables for developer teams. Variables are scoped to an **org → project → stage** hierarchy, encrypted at rest with per-project keys, and served at runtime to your application — either through the SDK or directly via the HTTP API.
 
 <CardGroup cols={2}>
-  <Card title="Quickstart" icon="rocket" href="/quickstart">
-    Set up Barekey locally and make your first request.
+  <Card title="Quickstart" icon="bolt" href="/quickstart">
+    Install the CLI, authenticate, and read your first secret in under five minutes.
   </Card>
-  <Card title="How it works" icon="vault" href="/concepts/how-barekey-works">
-    Learn the org, project, stage, and variable model.
+  <Card title="How Barekey works" icon="layer-group" href="/concepts/how-barekey-works">
+    Understand the org → project → stage → variable model and the resolution flow.
   </Card>
-  <Card title="JavaScript SDK" icon="code" href="/integrations/javascript-sdk">
-    Fetch variables from Node or server-side application code.
+  <Card title="JavaScript SDK" icon="js" href="/integrations/javascript-sdk">
+    Type-safe client for Node.js and edge runtimes. Fetches and coerces variables at request time.
   </Card>
-  <Card title="CLI" icon="terminal" href="/integrations/cli">
-    Log in, inspect variables, and pull resolved values.
+  <Card title="CLI reference" icon="terminal" href="/integrations/cli">
+    Manage variables from the command line. Authenticate, inspect, write, and pull to `.env`.
+  </Card>
+  <Card title="API reference" icon="code" href="/api-reference/introduction">
+    Full HTTP API documentation — evaluate, manage, and pull variables with a Bearer token.
+  </Card>
+  <Card title="Security model" icon="lock" href="/concepts/security-model">
+    Envelope encryption with AES-GCM-256. What is stored, what is hashed, and what is never persisted.
   </Card>
 </CardGroup>
 
-## Current product surface
+## How variables are organized
 
-Use these docs for the features that are available now:
+Every variable belongs to a project stage. A stage is a named environment (like `development`, `staging`, or `production`) inside a project, which lives inside an org. Values are isolated per stage — there is no automatic promotion or inheritance between them.
 
-- `secret` variables for the main `.env` replacement workflow
-- `ab_roll` variables as an optional extension
-- CLI device login
-- variable evaluation, listing, writing, and pulling
-- JavaScript SDK reads
-- manifest generation for type tooling
+```
+org: acme-42
+└── project: backend-api-1234
+    ├── stage: development   ← DATABASE_URL = postgres://localhost/dev
+    ├── stage: staging       ← DATABASE_URL = postgres://rds-staging/app
+    └── stage: production    ← DATABASE_URL = postgres://rds-prod/app
+```
 
-Use the [documentation plan](/roadmap/documentation-plan) for what we still need to add.
+Variables are encrypted at rest using a per-project data encryption key (DEK). The DEK itself is wrapped by a master key that lives outside the database. Plaintext is only produced during an authorized API request and is never persisted.
 
-## Recommended reading order
+## Authentication
 
-1. [Quickstart](/quickstart)
-2. [How Barekey works](/concepts/how-barekey-works)
-3. [Variable kinds](/concepts/variable-kinds)
-4. [JavaScript SDK](/integrations/javascript-sdk)
-5. [API authentication](/api-reference/authentication)
+There are two ways to authenticate against the API:
+
+- **Clerk JWT** — for web dashboard access and server-side integrations where your backend already issues Clerk tokens.
+- **CLI access token** — issued by the device code flow (`barekey auth login`), valid for one hour and refreshable for up to 30 days.
+
+Both tokens are passed as `Authorization: Bearer <token>` on every request.

@@ -1,105 +1,326 @@
 ---
-title: "CLI"
-description: "Use the Barekey CLI for login, variable management, and resolved pulls."
+title: CLI reference
+description: Complete command reference for the Barekey CLI — authenticate, manage variables, and pull secrets to a local .env file.
 ---
 
-## Login
+## Installation
+
+<Tabs>
+  <Tab title="Bun">
+    ```bash
+    bun add -g @barekey/cli
+    ```
+  </Tab>
+  <Tab title="npm">
+    ```bash
+    npm install -g @barekey/cli
+    ```
+  </Tab>
+  <Tab title="pnpm">
+    ```bash
+    pnpm add -g @barekey/cli
+    ```
+  </Tab>
+  <Tab title="yarn">
+    ```bash
+    yarn global add @barekey/cli
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## Target resolution
+
+All commands need to know which org, project, and stage to operate on. The CLI resolves the target in this priority order:
+
+1. **Command-line flags** — `--org`, `--project`, `--stage`
+2. **`barekey.json`** — in the current directory or any parent directory
+3. **Default stage** — if no stage is specified, the project's default stage (`development`) is used
+
+If the target cannot be resolved, the command exits with an error.
+
+---
+
+## Auth commands
+
+### `barekey auth login`
+
+Opens a browser-based device authorization flow. Prints a user code to enter in the browser, then waits for you to approve the session.
 
 ```bash
 barekey auth login
 ```
 
-This starts a browser device flow.
-When it completes, the CLI stores the session locally and uses `https://api.barekey.dev` unless you override the base URL.
+On success, stores the access token (1-hour TTL) and refresh token (30-day TTL) locally. The CLI automatically refreshes the access token using the refresh token when it expires.
 
-Inspect the current session:
+**Flags:**
+
+| Flag | Description |
+|---|---|
+| `--org <slug>` | Pre-select the org to log into. If omitted, the browser prompts for selection. |
+
+---
+
+### `barekey auth whoami`
+
+Prints the currently authenticated account and active org.
 
 ```bash
 barekey auth whoami
+# Authenticated as: jane@example.com (org: acme-42)
 ```
 
-Log out:
+---
+
+### `barekey auth logout`
+
+Revokes the current session and deletes the stored token.
 
 ```bash
 barekey auth logout
 ```
 
-## Target selection
+The refresh token is invalidated server-side immediately. Any active access tokens from this session will return `401` on their next use.
 
-Most variable commands need:
-
-- `--org`
-- `--project`
-- `--stage`
-
-If you omit them, the CLI looks for `barekey.json` in the current directory tree.
-
-```json
-{
-  "org": "acme-1234",
-  "project": "web-4567",
-  "environment": "development"
-}
-```
+---
 
 ## Variable commands
 
-Create a new variable:
+All variable commands accept these target flags:
+
+| Flag | Description |
+|---|---|
+| `--org <slug>` | Override the org slug |
+| `--project <slug>` | Override the project slug |
+| `--stage <name>` | Override the stage name |
+| `--json` | Output as machine-readable JSON instead of a table |
+
+---
+
+### `barekey env new`
+
+Creates a new variable (without setting a value). The variable must not already exist in the target stage.
 
 ```bash
-barekey env new DATABASE_URL "postgres://localhost:5432/app"
+barekey env new <NAME> [flags]
 ```
 
-Upsert a variable:
+**Flags:**
+
+| Flag | Description |
+|---|---|
+| `--type <type>` | Declared type: `string`, `boolean`, `int64`, `float`, `date`, `json`. Defaults to `string`. |
+| `--ab` | Create as an `ab_roll` kind instead of `secret`. Requires two values at set time. |
+
+**Examples:**
 
 ```bash
-barekey env set DATABASE_URL "postgres://localhost:5432/app"
+# Create a string secret
+barekey env new DATABASE_URL --type string
+
+# Create a boolean flag
+barekey env new FEATURE_ENABLED --type boolean
+
+# Create an A/B variable
+barekey env new CHECKOUT_FLOW --type string --ab
 ```
 
-Create an `ab_roll`:
+---
+
+### `barekey env set`
+
+Sets the value of an existing variable.
 
 ```bash
-barekey env set NEW_CHECKOUT off --ab on --chance 0.2
+barekey env set <NAME> <VALUE> [flags]
 ```
 
-List variables:
+For `ab_roll` variables:
 
 ```bash
-barekey env list
+barekey env set <NAME> --ab <VALUE_A> <VALUE_B> [flags]
 ```
 
-Read one value:
+**Flags:**
+
+| Flag | Description |
+|---|---|
+| `--ab <A> <B>` | Set both A and B values for an `ab_roll` variable |
+| `--chance <float>` | Probability of returning value A (0.0–1.0). Only for `ab_roll`. |
+
+**Examples:**
 
 ```bash
+# Set a secret value
+barekey env set DATABASE_URL "postgres://rds.example.com:5432/myapp"
+
+# Set both values and chance for an ab_roll
+barekey env set CHECKOUT_FLOW --ab "original" "redesigned" --chance 0.2
+
+# Update chance without changing values
+barekey env set CHECKOUT_FLOW --chance 0.5
+```
+
+---
+
+### `barekey env list`
+
+Lists all variables in the target stage. Shows name, kind, and declared type. Does not reveal values.
+
+```bash
+barekey env list [flags]
+```
+
+**Example output:**
+
+```
+NAME              KIND      TYPE     UPDATED
+DATABASE_URL      secret    string   2 hours ago
+FEATURE_ENABLED   secret    boolean  1 day ago
+CHECKOUT_FLOW     ab_roll   string   3 days ago
+```
+
+**With `--json`:**
+
+```json
+[
+  {
+    "name": "DATABASE_URL",
+    "kind": "secret",
+    "declaredType": "string",
+    "createdAtMs": 1700000000000,
+    "updatedAtMs": 1700050000000
+  }
+]
+```
+
+---
+
+### `barekey env get`
+
+Fetches and prints the value of a single variable.
+
+```bash
+barekey env get <NAME> [flags]
+```
+
+**Flags:**
+
+| Flag | Description |
+|---|---|
+| `--seed <value>` | Seed for deterministic `ab_roll` evaluation |
+| `--key <value>` | Namespace key for deterministic evaluation (used with `--seed`) |
+| `--json` | Output result as JSON with metadata |
+
+**Examples:**
+
+```bash
+# Get a secret
 barekey env get DATABASE_URL
+
+# Get with deterministic ab_roll resolution
+barekey env get CHECKOUT_FLOW --seed "user_abc123" --key "checkout-v1"
 ```
 
-Read many values:
+**With `--json`:**
 
-```bash
-barekey env get-many --names DATABASE_URL,ENABLE_LOGGING
+```json
+{
+  "name": "CHECKOUT_FLOW",
+  "kind": "ab_roll",
+  "value": "redesigned",
+  "decision": "b",
+  "declaredType": "string"
+}
 ```
 
-Delete a variable:
+---
+
+### `barekey env get-many`
+
+Fetches multiple variables in a single request.
 
 ```bash
-barekey env delete DATABASE_URL --yes
+barekey env get-many --names <NAME1> <NAME2> ... [flags]
 ```
 
-Pull resolved values:
+**Flags:**
+
+| Flag | Description |
+|---|---|
+| `--names <n...>` | Space-separated list of variable names |
+| `--json` | Output as JSON array |
+
+**Example:**
 
 ```bash
+barekey env get-many --names DATABASE_URL REDIS_URL MAX_CONNECTIONS --json
+```
+
+---
+
+### `barekey env delete`
+
+Deletes a variable from the target stage. Requires confirmation unless `--yes` is passed.
+
+```bash
+barekey env delete <NAME> [flags]
+```
+
+**Flags:**
+
+| Flag | Description |
+|---|---|
+| `--yes` | Skip the confirmation prompt |
+
+**Example:**
+
+```bash
+barekey env delete OLD_API_KEY --yes
+```
+
+---
+
+### `barekey env pull`
+
+Fetches all variables in the target stage and writes them to a file.
+
+```bash
+barekey env pull [flags]
+```
+
+**Flags:**
+
+| Flag | Description |
+|---|---|
+| `--format <fmt>` | Output format. Currently supports `dotenv`. |
+| `--out <path>` | Output file path. Defaults to `.env`. |
+| `--seed <value>` | Seed for deterministic `ab_roll` evaluation across all variables |
+| `--key <value>` | Namespace key for deterministic evaluation (used with `--seed`) |
+
+**Examples:**
+
+```bash
+# Pull development stage to .env.local
 barekey env pull --format dotenv --out .env.local
+
+# Pull staging stage
+barekey env pull --stage staging --format dotenv --out .env.staging
+
+# Pull with deterministic ab_roll resolution
+barekey env pull --format dotenv --out .env.local --seed "local-dev" --key "local"
 ```
 
-## Deterministic evaluation from the CLI
+The output file contains one `KEY="value"` line per variable, sorted alphabetically.
 
-Use `--seed` and `--key` with `env get`, `env get-many`, or `env pull` when you need stable `ab_roll` resolution.
-
-```bash
-barekey env get NEW_CHECKOUT --seed user_42 --key user_42
+```bash .env.local
+CHECKOUT_FLOW="original"
+DATABASE_URL="postgres://localhost:5432/myapp_dev"
+FEATURE_ENABLED="true"
 ```
 
-## JSON output
-
-Most read and write commands support `--json` for machine-readable output.
+<Warning>
+  Pulled files contain plaintext secrets. Add the output path to `.gitignore`
+  before running `env pull`.
+</Warning>

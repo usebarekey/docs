@@ -1,11 +1,21 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
+  "theme": "maple",
   "name": "Barekey",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#22C55E",
-    "dark": "#15803D"
+    "primary": "#394447",
+    "light": "#4b585b",
+    "dark": "#161b1d"
+  },
+  "fonts": {
+    "heading": { "family": "Google Sans" },
+    "body": { "family": "Google Sans" }
+  },
+  "background": {
+    "color": {
+      "light": "#f9fbfb",
+      "dark": "#090b0c"
+    }
   },
   "favicon": "/images/barekey-light.png",
   "navigation": {
@@ -26,6 +36,8 @@
             "pages": [
               "concepts/how-barekey-works",
               "concepts/variable-kinds",
+              "concepts/stages",
+              "concepts/declared-types",
               "concepts/security-model"
             ]
           },
@@ -33,13 +45,9 @@
             "group": "Integrations",
             "pages": [
               "integrations/javascript-sdk",
-              "integrations/cli"
-            ]
-          },
-          {
-            "group": "Roadmap",
-            "pages": [
-              "roadmap/documentation-plan"
+              "integrations/patterns",
+              "integrations/cli",
+              "integrations/local-development"
             ]
           }
         ]
@@ -66,6 +74,12 @@
             "pages": [
               "api-reference/cli-auth",
               "api-reference/typegen-manifest"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              "api-reference/errors"
             ]
           }
         ]
@@ -118,6 +132,12 @@
   "footer": {
     "socials": {
       "github": "https://github.com/usebarekey/barekey"
+    }
+  },
+  "codeBlock": {
+    "theme": {
+      "light": "github-light",
+      "dark": "github-dark"
     }
   },
   "description": "Barekey documentation for encrypted variables, .env replacement workflows, the CLI, the JavaScript SDK, and optional dynamic kinds.",

@@ -1,0 +1,100 @@
+---
+title: Stages
+description: How stages isolate variables between environments, how to target a specific stage, and why stage-level isolation matters.
+---
+
+A **stage** is a named environment within a project. Every variable belongs to exactly one stage. There is no sharing or inheritance between stages — the same key in `development` and `production` are completely independent rows with independent encrypted values.
+
+---
+
+## Default stages
+
+When you create a project, Barekey automatically provisions three stages:
+
+| Stage | Purpose |
+|---|---|
+| `development` | Local development — typically points to local services |
+| `staging` | Pre-production — mirrors production config with test data |
+| `production` | Live traffic — most sensitive, most restricted access |
+
+One stage is marked `isDefault`. This is the stage the CLI targets if you don't specify `--stage` and there is no `stage` field in `barekey.json`. By default, `development` is the default stage.
+
+---
+
+## Stage isolation
+
+Variables are completely isolated per stage. This means:
+
+- Setting `DATABASE_URL` in `development` has no effect on `staging` or `production`.
+- Deleting a variable from `staging` does not remove it from `production`.
+- Reading a variable from `production` requires authorization against the production org/project scope — the same token can't bypass stage isolation.
+
+If you want the same value in two stages, you must explicitly write it to both. This is intentional — accidental promotion of wrong values is prevented at the data model level.
+
+---
+
+## Targeting a stage
+
+### In `barekey.json`
+
+```json barekey.json
+{
+  "org": "acme-42",
+  "project": "backend-api-1234",
+  "stage": "production"
+}
+```
+
+### CLI flags
+
+`--stage` overrides `barekey.json` and the default:
+
+```bash
+# List production variables
+barekey env list --stage production
+
+# Pull staging to a local file
+barekey env pull --stage staging --format dotenv --out .env.staging
+```
+
+### SDK constructor
+
+```typescript
+const barekey = new BarekeyClient({
+  baseUrl: "https://api.barekey.dev",
+  orgSlug: "acme-42",
+  projectSlug: "backend-api-1234",
+  stageSlug: "production",       // ← set the target stage here
+  auth: { getAccessToken: async () => process.env.BAREKEY_TOKEN! },
+});
+```
+
+### HTTP API
+
+All environment API endpoints accept `stageSlug` in the request body:
+
+```json
+{
+  "orgSlug": "acme-42",
+  "projectSlug": "backend-api-1234",
+  "stageSlug": "production",
+  "name": "DATABASE_URL"
+}
+```
+
+---
+
+## Production access
+
+Production stages should be treated with the most caution:
+
+- Rotate CLI access tokens regularly; don't share them between team members.
+- In CI/CD pipelines, use a dedicated token stored as a CI secret. Never use a personal token.
+- Avoid pulling production variables to local `.env` files — use `staging` for local integration testing.
+- The evaluation endpoint requires a valid Bearer token on every request; there is no anonymous read path.
+
+---
+
+## Custom stages
+
+Beyond the default three, you can create additional stages from the dashboard — for example `preview`, `canary`, or `load-test`. Custom stages behave identically to the default ones.
