@@ -1,155 +1,88 @@
 ---
 title: Variable kinds
-description: Barekey supports two variable kinds — secret and ab_roll. This page covers how each kind works, how values are stored and resolved, and how to use them.
+description: Barekey currently documents two shipped variable kinds: `secret` and `ab_roll`.
 ---
 
-A variable's `kind` determines how Barekey resolves it at evaluation time. The kind is set when the variable is created and cannot be changed without deleting and recreating it.
+Barekey currently documents these shipped kinds:
 
----
+- `secret`
+- `ab_roll`
 
 ## `secret`
 
-A `secret` is a classic single-value variable. Every evaluation returns the same stored value (subject to authorization).
+A `secret` is a single stored value.
 
-**Storage:** one encrypted payload stored in the `projectVariables` table.
-
-**Evaluation response:**
-
-```json
-{
-  "name": "DATABASE_URL",
-  "kind": "secret",
-  "value": "postgres://rds.example.com:5432/myapp",
-  "declaredType": "string",
-  "requestId": "req_..."
-}
-```
-
-**CLI:**
+Create one:
 
 ```bash
-# Create
-barekey env new DATABASE_URL --type string
+barekey env new DATABASE_URL "postgres://localhost:5432/app" --type string
+```
 
-# Set value
-barekey env set DATABASE_URL "postgres://rds.example.com:5432/myapp"
+Read it with the CLI:
 
-# Read
+```bash
 barekey env get DATABASE_URL
 ```
 
-**SDK:**
+Read it with the SDK:
 
-```typescript
-const url = await barekey.env.get("DATABASE_URL").string();
+```ts
+const databaseUrl = await barekey.get("DATABASE_URL");
 ```
-
----
 
 ## `ab_roll`
 
-An `ab_roll` variable has two values — `A` and `B` — and a `chance` parameter between `0.0` and `1.0`. On each evaluation, Barekey selects one of the two values and returns which bucket was chosen in the `decision` field.
+An `ab_roll` stores two values:
 
-`chance` is the probability of returning value A. A `chance` of `0.8` means 80% of evaluations return A and 20% return B.
+- A
+- B
 
-**Storage:** two encrypted payloads (`encryptedValueA`, `encryptedValueB`) and a `chance` float.
+And a `chance` between `0` and `1`.
 
-### Random evaluation
-
-Without a seed, Barekey uses `Math.random()` to select the bucket. Each evaluation is independent.
-
-**Evaluation response:**
-
-```json
-{
-  "name": "CHECKOUT_FLOW",
-  "kind": "ab_roll",
-  "value": "redesigned",
-  "declaredType": "string",
-  "decision": "b",
-  "requestId": "req_..."
-}
-```
-
-`decision` is `"a"` when value A is returned, `"b"` when value B is returned.
-
-### Deterministic evaluation
-
-Pass a `seed` (a stable identifier like a user ID) and a `key` (a namespace) to get a deterministic bucket assignment. Barekey computes:
-
-```
-bucket = SHA-256("ab_roll:{name}:{seed}:{key}")
-```
-
-The resulting hash is interpreted as a float between 0 and 1 and compared against `chance`. The same `seed` + `key` combination always returns the same bucket for the same variable.
-
-This is useful for cohort-consistent rollouts — a user always sees the same variant across sessions and deployments.
-
-**API request with seed:**
-
-```json
-{
-  "orgSlug": "acme-42",
-  "projectSlug": "backend-api-1234",
-  "stageSlug": "production",
-  "name": "CHECKOUT_FLOW",
-  "seed": "user_abc123",
-  "key": "checkout-experiment-v1"
-}
-```
-
-**CLI with seed:**
+Create one:
 
 ```bash
-barekey env get CHECKOUT_FLOW --seed "user_abc123" --key "checkout-experiment-v1"
+barekey env new CHECKOUT_FLOW control --ab treatment --chance 0.2
 ```
 
-**SDK with seed:**
+That means value A is returned 20% of the time and value B is returned 80% of the time.
 
-```typescript
-const variant = await barekey.env
-  .get("CHECKOUT_FLOW", { seed: userId, key: "checkout-experiment-v1" })
-  .string();
+### Deterministic reads
 
-if (variant === "redesigned") {
-  // render new checkout
-} else {
-  // render old checkout
-}
-```
+Pass `seed` and `key` to keep the result stable for a given user or cohort.
 
-### Creating an ab_roll variable
-
-**CLI:**
+CLI:
 
 ```bash
-barekey env new CHECKOUT_FLOW --type string --ab
-barekey env set CHECKOUT_FLOW --ab "original" "redesigned" --chance 0.2
+barekey env get CHECKOUT_FLOW --seed user-42 --key checkout-v1
 ```
 
-The `--chance` value is the probability of returning the first (A) value. `0.2` means 20% get A, 80% get B.
+SDK:
 
-**API write entry:**
-
-```json
-{
-  "name": "CHECKOUT_FLOW",
-  "kind": "ab_roll",
-  "valueA": "original",
-  "valueB": "redesigned",
-  "chance": 0.2,
-  "declaredType": "string"
-}
+```ts
+const variant = await barekey.get("CHECKOUT_FLOW", {
+  seed: user.id,
+  key: "checkout-v1",
+});
 ```
 
----
+### Inspecting the decision
 
-## Comparing the two kinds
+Use `inspect()` in the SDK when you want the decision metadata:
 
-| Property | `secret` | `ab_roll` |
-|---|---|---|
-| Number of values | 1 | 2 (`valueA`, `valueB`) |
-| `chance` field | Not applicable | Required (0.0–1.0) |
-| `decision` in response | Not present | `"a"` or `"b"` |
-| Deterministic via seed | N/A | Yes — `seed` + `key` |
-| Storage cost | 1 encrypted payload | 2 encrypted payloads |
+```ts
+const result = await barekey.get("CHECKOUT_FLOW", {
+  seed: user.id,
+  key: "checkout-v1",
+}).inspect();
+
+result.value;
+result.decision;
+result.selectedArm;
+```
+
+## Choosing between them
+
+Use `secret` when you want one value for the whole stage.
+
+Use `ab_roll` when you want one of two values, optionally pinned to a stable seed and key.

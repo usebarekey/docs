@@ -1,16 +1,15 @@
 ---
 title: JavaScript SDK
-description: The @barekey/sdk package for Node.js and edge runtimes. Fetches, decrypts, and coerces environment variables at request time.
+description: Full guide to the Barekey SDK, including configuration, auth resolution, typegen, dynamic reads, public reads, and standalone local mode.
 ---
 
-## Installation
+Use the Barekey SDK when your code should read variables directly instead of shelling out to the CLI or depending on a pulled `.env` file.
+
+For most server-side code, import from `@barekey/sdk/server`.
+
+## Install
 
 <Tabs>
-  <Tab title="Bun">
-    ```bash
-    bun add @barekey/sdk
-    ```
-  </Tab>
   <Tab title="npm">
     ```bash
     npm install @barekey/sdk
@@ -26,505 +25,398 @@ description: The @barekey/sdk package for Node.js and edge runtimes. Fetches, de
     yarn add @barekey/sdk
     ```
   </Tab>
+  <Tab title="bun">
+    ```bash
+    bun add @barekey/sdk
+    ```
+  </Tab>
 </Tabs>
 
-Requires Node.js 18+ or any runtime with the Web Crypto API and `fetch` — Cloudflare Workers, Deno, Bun, and Vercel Edge all qualify.
+## Package entrypoints
 
----
+| Import | Use for |
+| --- | --- |
+| `@barekey/sdk/server` | server-side reads, CLI-session auth, API-backed mode, standalone `.env` mode, and typegen |
+| `@barekey/sdk/public` | public variables only, including browser-facing reads |
+| `@barekey/sdk` | combined root export, but the explicit subpaths are clearer in app code |
 
-## Creating a client
+## The simplest server client
 
-```typescript lib/barekey.ts
-import { BarekeyClient } from "@barekey/sdk";
+```ts
+import { BarekeyClient } from "@barekey/sdk/server";
 
-export const barekey = new BarekeyClient({
-  baseUrl: "https://api.barekey.dev",
-  orgSlug: process.env.BAREKEY_ORG!,
-  projectSlug: process.env.BAREKEY_PROJECT!,
-  stageSlug: process.env.BAREKEY_STAGE ?? "development",
-  auth: {
-    getAccessToken: async () => {
-      const token = process.env.BAREKEY_ACCESS_TOKEN;
-      if (!token) throw new Error("BAREKEY_ACCESS_TOKEN is not set");
-      return token;
-    },
+export const barekey = new BarekeyClient();
+```
+
+This works when:
+
+- `barekey.json` can be found in the current directory or a parent directory
+- the runtime can authenticate with either `BAREKEY_ACCESS_TOKEN` or a stored CLI login
+
+## How the server SDK resolves configuration
+
+`BarekeyClient` supports three configuration styles.
+
+### Option 1: rely on `barekey.json`
+
+```ts
+const client = new BarekeyClient();
+```
+
+This is usually the best local-development setup.
+
+### Option 2: pass the scope explicitly
+
+```ts
+const client = new BarekeyClient({
+  organization: "acme",
+  project: "web",
+  environment: "production",
+});
+```
+
+### Option 3: pass a `json` object
+
+```ts
+const client = new BarekeyClient({
+  json: {
+    organization: "acme",
+    project: "web",
+    environment: "production",
   },
 });
 ```
 
-Create the client **once at module load** and export it. Instantiating it per-request adds unnecessary overhead — the constructor is synchronous, but the pattern of shared singletons keeps things predictable.
+You must provide either:
 
-<Note>
-  `BAREKEY_STAGE` lets you decouple the stage from `NODE_ENV`. A common setup
-  is to set `BAREKEY_STAGE=production` in your deployment environment and leave
-  it unset (falling back to `"development"`) locally.
-</Note>
+- all of `organization`, `project`, and `environment`
+- or `json`
+- or nothing, in which case Barekey tries to load `barekey.json`
 
-### Constructor options
+Do not mix explicit fields with `json`.
 
-| Option | Type | Required | Description |
-|---|---|---|---|
-| `baseUrl` | `string` | Yes | Always `https://api.barekey.dev` for production. |
-| `orgSlug` | `string` | Yes | Your org slug (visible in the dashboard URL). |
-| `projectSlug` | `string` | Yes | Project slug. |
-| `stageSlug` | `string` | Yes | Stage name — `development`, `staging`, `production`, or a custom stage. |
-| `auth` | `AuthContract` | Yes | Object with a `getAccessToken` function. See below. |
+## `barekey.json` reference
 
-### Auth contract
+This file is used by both the SDK and CLI.
 
-```typescript
-interface AuthContract {
-  /**
-   * Called before every API request. Must return a valid Bearer token —
-   * either a CLI access token (bk_at_...) or a Clerk JWT.
-   * The SDK does not cache tokens — implement caching or refresh here if needed.
-   */
-  getAccessToken: () => Promise<string>;
-
-  /**
-   * Optional. Called when the API returns 401. Use this to clear cached
-   * tokens, alert on-call, or trigger a re-authentication flow.
-   */
-  onAuthError?: (error: Error) => void;
-}
-```
-
-The access token is fetched fresh before every request. If your token is long-lived (e.g. stored as a deployment secret), reading it from `process.env` is fine. If you need token refresh, implement it inside `getAccessToken`:
-
-```typescript
-// Token refresh example — only relevant if you're managing CLI sessions programmatically
-let cachedToken: string | null = null;
-let expiresAt = 0;
-
-auth: {
-  getAccessToken: async () => {
-    if (cachedToken && Date.now() < expiresAt - 60_000) {
-      return cachedToken;
-    }
-    const { accessToken, expiresAtMs } = await refreshMyToken();
-    cachedToken = accessToken;
-    expiresAt = expiresAtMs;
-    return cachedToken;
-  },
-}
-```
-
----
-
-## Reading variables
-
-### Single variable
-
-```typescript
-// string
-const dbUrl = await barekey.env.get("DATABASE_URL").string();
-
-// boolean — stored as "true" / "false"
-const maintenanceMode = await barekey.env.get("MAINTENANCE_MODE").boolean();
-
-// number — works for int64 and float declared types
-const maxConnections = await barekey.env.get("MAX_CONNECTIONS").number();
-
-// JSON object — type parameter flows through
-const flags = await barekey.env.get("FEATURE_FLAGS").json<FeatureFlags>();
-
-// Raw string — no coercion applied
-const rawCert = await barekey.env.get("TLS_CERT_PEM").raw();
-```
-
-### Accessor methods
-
-| Method | Return type | Notes |
-|---|---|---|
-| `.string()` | `Promise<string>` | Returns the stored value as-is |
-| `.boolean()` | `Promise<boolean>` | `"true"` → `true`, `"false"` → `false`. Throws on any other value |
-| `.number()` | `Promise<number>` | Parsed with `Number()`. Throws if `NaN` |
-| `.json<T>()` | `Promise<T>` | Parsed with `JSON.parse()`. Throws if not valid JSON |
-| `.raw()` | `Promise<string>` | Identical to `.string()` but signals no coercion is expected |
-| `.default(value)` | accessor (chainable) | Returns `value` instead of throwing when the variable is not found |
-| `.required()` | accessor (chainable) | Documents that a missing variable should throw — this is the default |
-
-### Fallbacks with `.default()`
-
-```typescript
-// Use a local default if the variable doesn't exist in this stage yet
-const timeout = await barekey.env
-  .get("REQUEST_TIMEOUT_MS")
-  .default(5000)
-  .number();
-
-const logLevel = await barekey.env
-  .get("LOG_LEVEL")
-  .default("info")
-  .string();
-```
-
-`.default()` only catches `VARIABLE_NOT_FOUND` (404). Auth errors and decryption failures still throw.
-
-### Batch fetch
-
-`getMany` fetches multiple variables in a single HTTP request:
-
-```typescript
-const [dbUrl, redisUrl, stripeKey] = await barekey.env.getMany([
-  { name: "DATABASE_URL" },
-  { name: "REDIS_URL" },
-  { name: "STRIPE_SECRET_KEY" },
-]);
-
-// Each item is the same accessor — call type methods on it
-const db = dbUrl.string();
-const redis = redisUrl.string();
-const stripe = stripeKey.string();
-```
-
-Use `getMany` at startup to load all config needed to boot your server — one round trip instead of N.
-
----
-
-## A/B roll variables
-
-For variables with `kind: ab_roll`, pass `seed` and `key` to get a stable bucket assignment per user. The same `seed` + `key` always returns the same variant.
-
-```typescript
-// Random evaluation — different result per call
-const variant = await barekey.env.get("CHECKOUT_REDESIGN").string();
-
-// Deterministic evaluation — stable per userId
-const variant = await barekey.env
-  .get("CHECKOUT_REDESIGN", { seed: user.id, key: "checkout-v2" })
-  .string();
-
-if (variant === "treatment") {
-  return renderNewCheckout(cart);
-} else {
-  return renderOriginalCheckout(cart);
-}
-```
-
-The `key` acts as an experiment namespace — changing it resets all bucket assignments while keeping the same `seed`. Use a versioned key like `"checkout-v2"` when you want to start a fresh experiment.
-
-Batch `ab_roll` evaluation with different seeds:
-
-```typescript
-const [checkout, onboarding] = await barekey.env.getMany([
-  { name: "CHECKOUT_REDESIGN", seed: user.id, key: "checkout-v2" },
-  { name: "ONBOARDING_FLOW", seed: user.id, key: "onboarding-v1" },
-]);
-```
-
----
-
-## Error handling
-
-The SDK throws a `BarekeyError` on any non-2xx response:
-
-```typescript
-import { BarekeyClient, BarekeyError } from "@barekey/sdk";
-
-try {
-  const dbUrl = await barekey.env.get("DATABASE_URL").string();
-} catch (err) {
-  if (err instanceof BarekeyError) {
-    // err.code    — stable machine-readable code (see /api-reference/errors)
-    // err.status  — HTTP status number
-    // err.message — human-readable description
-    // err.requestId — trace ID from the API, include in bug reports
-
-    if (err.code === "VARIABLE_NOT_FOUND") {
-      // Expected — variable not yet created in this stage
-    } else {
-      throw err;
-    }
-  } else {
-    throw err;
+```json
+{
+  "organization": "acme",
+  "project": "web",
+  "environment": "development",
+  "config": {
+    "typegen": "semantic",
+    "mode": "centralized"
   }
 }
 ```
 
-| Code | When |
-|---|---|
-| `UNAUTHORIZED` | Token is invalid, expired, or revoked |
-| `VARIABLE_NOT_FOUND` | Variable doesn't exist in this stage — use `.default()` to handle gracefully |
-| `INVALID_ORG_SCOPE` | Token org doesn't match `orgSlug` |
-| `USAGE_LIMIT_EXCEEDED` | Free plan evaluation limit reached |
-| `EVALUATION_FAILED` | Decryption error — server-side, retry or contact support with `requestId` |
+### Top-level keys
 
----
+| Key | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `organization` | `string` | Yes in centralized mode | Canonical organization key |
+| `project` | `string` | Yes in centralized mode | Project slug |
+| `environment` | `string` | Yes in centralized mode | Stage name |
+| `org` | `string` | No | Alias for `organization` |
+| `stage` | `string` | No | Alias for `environment` |
+| `config` | `object` | No | Extra SDK and runtime behavior |
 
-## Initializing infrastructure at startup
+### `config` keys
 
-The most common pattern is to load all variables once at server start and use them to initialize long-lived connections:
+| Key | Allowed values | Default | What it does |
+| --- | --- | --- | --- |
+| `config.mode` | `"centralized"` or `"standalone"` | `"centralized"` | Chooses API-backed Barekey mode or local `.env` file mode |
+| `config.typegen` | `"semantic"` or `"minimal"` | `"semantic"` in centralized mode, `"minimal"` in standalone mode | Controls the style of generated SDK types |
 
-```typescript lib/bootstrap.ts
-import { barekey } from "./barekey";
-import { Pool } from "pg";
-import Redis from "ioredis";
-import Stripe from "stripe";
+### Search behavior
 
-export async function bootstrap() {
-  const [dbUrl, redisUrl, stripeKey, smtpPass] = await barekey.env.getMany([
-    { name: "DATABASE_URL" },
-    { name: "REDIS_URL" },
-    { name: "STRIPE_SECRET_KEY" },
-    { name: "SMTP_PASSWORD" },
-  ]);
+The SDK and CLI search for `barekey.json` starting from the current working directory and walking upward through parent directories.
 
-  const db = new Pool({ connectionString: await dbUrl.string() });
-  const cache = new Redis(await redisUrl.string());
-  const stripe = new Stripe(await stripeKey.string());
+That means one repo-level file can cover a whole monorepo.
 
-  return { db, cache, stripe };
-}
+## How auth is resolved
+
+In centralized mode, `BarekeyClient` resolves credentials in this order:
+
+1. `BAREKEY_ACCESS_TOKEN`
+2. a stored CLI session created by `barekey auth login`
+
+### `BAREKEY_ACCESS_TOKEN`
+
+If `BAREKEY_ACCESS_TOKEN` is set, the SDK uses it directly.
+
+Optional:
+
+- `BAREKEY_API_URL` overrides the default API base URL
+
+Example:
+
+```bash
+export BAREKEY_ACCESS_TOKEN="bk_at_..."
+export BAREKEY_API_URL="https://api.barekey.dev"
 ```
 
-Call `bootstrap()` once when your server starts, then pass the initialized clients through your application context. Don't call the SDK per-request for static config like database URLs — fetch them once and hold the connection.
+This is the best fit for production deploys and CI.
 
----
+### CLI session fallback
 
-## Feature flags with JSON variables
+If `BAREKEY_ACCESS_TOKEN` is not set, the SDK tries to reuse the local CLI login. That is convenient for local development because you can log in once with:
 
-Store all feature flags as a single JSON variable to minimize API calls:
-
-```typescript
-// In Barekey dashboard or CLI:
-// barekey env new FEATURE_FLAGS --type json
-// barekey env set FEATURE_FLAGS '{"darkMode":true,"newDashboard":false,"maxUploadMb":25}'
-
-interface FeatureFlags {
-  darkMode: boolean;
-  newDashboard: boolean;
-  maxUploadMb: number;
-}
-
-// Load once at startup
-const flags = await barekey.env.get("FEATURE_FLAGS").json<FeatureFlags>();
-
-// Use throughout your app
-if (flags.newDashboard) {
-  router.use("/dashboard", newDashboardHandler);
-}
-
-app.post("/upload", (req, res) => {
-  if (req.file.size > flags.maxUploadMb * 1024 * 1024) {
-    return res.status(413).json({ error: "File too large" });
-  }
-});
+```bash
+barekey auth login
 ```
 
-For flags that need to change without a redeploy, fetch them per-request (or on a short polling interval) rather than at startup.
+Then your app can usually run without extra token wiring.
 
----
+## Reading values
 
-## Testing
+`get()` returns a promise-like handle.
 
-Avoid calling Barekey in unit tests. Create a test client that returns mocked values:
+If the variable has a known generated type, `await` returns the parsed value directly.
 
-```typescript test/helpers/barekey.ts
-import { BarekeyClient } from "@barekey/sdk";
-
-export function createTestClient(overrides: Record<string, string> = {}) {
-  return new BarekeyClient({
-    baseUrl: "http://localhost:9999", // will never be called
-    orgSlug: "test-org",
-    projectSlug: "test-project",
-    stageSlug: "development",
-    auth: {
-      getAccessToken: async () => "test-token",
-    },
-    // Override the fetch implementation to return mock values
-    _fetch: async (_url: string, body: unknown) => {
-      const name = (body as { name: string }).name;
-      const value = overrides[name] ?? `mock-${name}`;
-      return new Response(JSON.stringify({ name, kind: "secret", value }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      });
-    },
-  });
-}
+```ts
+const url = await barekey.get("DATABASE_URL");
+const featureEnabled = await barekey.get("FEATURE_ENABLED");
 ```
 
-Use it in tests:
+Batch reads preserve input order:
 
-```typescript
-import { createTestClient } from "./helpers/barekey";
-
-describe("checkout handler", () => {
-  it("uses the database URL from config", async () => {
-    const barekey = createTestClient({
-      DATABASE_URL: "postgres://localhost:5432/test",
-      STRIPE_SECRET_KEY: "sk_test_mock",
-    });
-
-    const handler = createCheckoutHandler({ barekey });
-    const result = await handler(mockRequest);
-    expect(result.status).toBe(200);
-  });
-});
+```ts
+const [databaseUrl, redisUrl] = await barekey.get([
+  "DATABASE_URL",
+  "REDIS_URL",
+] as const);
 ```
 
----
+## Use `inspect()` when you need metadata
 
-## Framework integration
+```ts
+const result = await barekey.get("DATABASE_URL").inspect();
 
-### Next.js (App Router)
-
-Create the client in a shared module. Next.js server components, route handlers, and server actions can all import it:
-
-```typescript lib/barekey.ts
-import { BarekeyClient } from "@barekey/sdk";
-
-// Module-level singleton — created once per server process
-export const barekey = new BarekeyClient({
-  baseUrl: "https://api.barekey.dev",
-  orgSlug: process.env.BAREKEY_ORG!,
-  projectSlug: process.env.BAREKEY_PROJECT!,
-  stageSlug: process.env.BAREKEY_STAGE ?? "development",
-  auth: {
-    getAccessToken: async () => process.env.BAREKEY_ACCESS_TOKEN!,
-  },
-});
+result.value;
+result.rawValue;
+result.name;
+result.kind;
+result.declaredType;
+result.visibility;
+result.decision;
+result.selectedArm;
 ```
 
-In a server component:
+This is especially useful for:
 
-```typescript app/dashboard/page.tsx
-import { barekey } from "@/lib/barekey";
+- debugging
+- logging resolution metadata
+- checking `ab_roll` decisions
 
-export default async function DashboardPage() {
-  const flags = await barekey.env
-    .get("FEATURE_FLAGS")
-    .json<{ newDashboard: boolean }>();
+## Dynamic reads and caching
 
-  return flags.newDashboard ? <NewDashboard /> : <Dashboard />;
-}
-```
+`get()` accepts `BarekeyGetOptions`:
 
-In a route handler:
-
-```typescript app/api/checkout/route.ts
-import { barekey } from "@/lib/barekey";
-import Stripe from "stripe";
-
-export async function POST(req: Request) {
-  const userId = getUserId(req);
-
-  const [stripeKey, variant] = await barekey.env.getMany([
-    { name: "STRIPE_SECRET_KEY" },
-    { name: "CHECKOUT_REDESIGN", seed: userId, key: "checkout-v2" },
-  ]);
-
-  const stripe = new Stripe(await stripeKey.string());
-  // use variant.string() to render the right checkout flow
-}
-```
-
-### Express / Hono
-
-Initialize at boot, attach to app context:
-
-```typescript server.ts
-import express from "express";
-import { barekey } from "./lib/barekey";
-
-async function main() {
-  // Load everything needed to boot in one call
-  const [dbUrl, redisUrl] = await barekey.env.getMany([
-    { name: "DATABASE_URL" },
-    { name: "REDIS_URL" },
-  ]);
-
-  const app = express();
-
-  // Attach barekey to locals for per-request use (e.g. A/B flags)
-  app.use((req, _res, next) => {
-    req.app.locals.barekey = barekey;
-    next();
-  });
-
-  app.get("/", async (req, res) => {
-    const variant = await barekey.env
-      .get("HOMEPAGE_VARIANT", { seed: req.cookies.userId, key: "homepage-v1" })
-      .string();
-
-    res.render("home", { variant });
-  });
-
-  await app.listen(3000);
-  console.log("Server running on :3000");
-}
-
-main();
-```
-
-### Cloudflare Workers
-
-Workers don't have a persistent module scope, so create the client inside the fetch handler. Pass the Worker's `env` bindings as the token source:
-
-```typescript src/worker.ts
-import { BarekeyClient } from "@barekey/sdk";
-
-interface Env {
-  BAREKEY_ORG: string;
-  BAREKEY_PROJECT: string;
-  BAREKEY_STAGE: string;
-  BAREKEY_ACCESS_TOKEN: string;
-}
-
-export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
-    const barekey = new BarekeyClient({
-      baseUrl: "https://api.barekey.dev",
-      orgSlug: env.BAREKEY_ORG,
-      projectSlug: env.BAREKEY_PROJECT,
-      stageSlug: env.BAREKEY_STAGE,
-      auth: {
-        getAccessToken: async () => env.BAREKEY_ACCESS_TOKEN,
-      },
-    });
-
-    const [apiKey, rateLimit] = await barekey.env.getMany([
-      { name: "UPSTREAM_API_KEY" },
-      { name: "RATE_LIMIT_RPS" },
-    ]);
-
-    // use them in your handler...
-    return new Response("ok");
-  },
+```ts
+type BarekeyGetOptions = {
+  dynamic?: true | { ttl: number | Date | { epochMilliseconds: number } };
+  seed?: string;
+  key?: string;
 };
 ```
 
-Store `BAREKEY_ACCESS_TOKEN` as an encrypted Worker secret via `wrangler secret put BAREKEY_ACCESS_TOKEN`.
+### `dynamic`
 
-### Remix
+Use `dynamic` when a value should be refreshed instead of coming from the static definition cache.
 
-```typescript app/utils/barekey.server.ts
-// .server.ts — Remix excludes this from the client bundle
-import { BarekeyClient } from "@barekey/sdk";
+```ts
+const value = await barekey.get("PUBLIC_MESSAGE", {
+  dynamic: true,
+});
+```
 
-export const barekey = new BarekeyClient({
-  baseUrl: "https://api.barekey.dev",
-  orgSlug: process.env.BAREKEY_ORG!,
-  projectSlug: process.env.BAREKEY_PROJECT!,
-  stageSlug: process.env.BAREKEY_STAGE ?? "development",
-  auth: {
-    getAccessToken: async () => process.env.BAREKEY_ACCESS_TOKEN!,
+With a TTL:
+
+```ts
+const value = await barekey.get("PUBLIC_MESSAGE", {
+  dynamic: { ttl: 5_000 },
+});
+```
+
+`ttl` means:
+
+- numbers are milliseconds
+- `Date` uses its timestamp
+- objects with `epochMilliseconds` are also accepted
+
+### `seed` and `key`
+
+Use these for deterministic `ab_roll` evaluation:
+
+```ts
+const checkoutVariant = await barekey.get("CHECKOUT_FLOW", {
+  seed: user.id,
+  key: "checkout-v1",
+});
+```
+
+The same `seed` and `key` pair gives the same result for the same variable.
+
+## Typegen
+
+Barekey can write generated types into your installed `@barekey/sdk` package.
+
+Run:
+
+```bash
+barekey typegen
+```
+
+Then known keys become typed in the SDK.
+
+### Typegen modes
+
+#### `semantic`
+
+This is the centralized default.
+
+It preserves Barekey metadata in the generated types, including:
+
+- mode
+- visibility
+
+#### `minimal`
+
+This is the standalone default.
+
+It generates simpler value types, which is useful when types are inferred from local `.env` files.
+
+### SDK-side typegen refresh
+
+`BarekeyClient` also accepts:
+
+```ts
+const client = new BarekeyClient({
+  typegen: false,
+});
+```
+
+Or:
+
+```ts
+const client = new BarekeyClient({
+  typegen: {
+    ttl: 5_000,
   },
 });
 ```
 
-In a loader:
+Notes:
 
-```typescript app/routes/checkout.tsx
-import { barekey } from "~/utils/barekey.server";
+- automatic typegen refresh only runs in `development`
+- it only applies when filesystem access is available
+- set `typegen: false` to disable it
 
-export async function loader({ request }: LoaderFunctionArgs) {
-  const userId = await getUserId(request);
-  const variant = await barekey.env
-    .get("CHECKOUT_REDESIGN", { seed: userId, key: "checkout-v2" })
-    .string();
+## Requirements validation
 
-  return json({ variant });
+You can validate the resolved configuration against a Standard Schema v1 validator before reads proceed.
+
+```ts
+const client = new BarekeyClient({
+  requirements: {
+    "~standard": {
+      validate(value) {
+        return { value };
+      },
+    },
+  },
+});
+```
+
+Use this when you want startup-time guarantees that required Barekey values form a valid config object.
+
+## Standalone mode
+
+Standalone mode makes the server SDK read local `.env*` files instead of calling the Barekey API.
+
+Set:
+
+```json
+{
+  "config": {
+    "mode": "standalone"
+  }
 }
 ```
+
+In this mode:
+
+- filesystem access is required
+- `organization`, `project`, and `environment` may be omitted
+- `typegen` becomes `minimal`
+- values are inferred from local `.env` content
+
+This is useful when you want one SDK API for local and centralized setups.
+
+Read more in [Local development](/integrations/local-development).
+
+## Public client
+
+Use `PublicBarekeyClient` for public variables:
+
+```ts
+import { PublicBarekeyClient } from "@barekey/sdk/public";
+
+const client = new PublicBarekeyClient({
+  organization: "acme",
+  project: "web",
+  environment: "production",
+});
+
+const title = await client.get("PUBLIC_TITLE");
+```
+
+### Important public-client rules
+
+- it only reads public variables
+- it does not use CLI auth
+- it supports `baseUrl`
+- it does not support standalone mode
+
+If `config.mode` is `"standalone"`, `PublicBarekeyClient` throws.
+
+## Errors you should expect
+
+The SDK throws `BarekeyError` subclasses. Common ones:
+
+| Error code | Meaning |
+| --- | --- |
+| `NO_CONFIGURATION_PROVIDED` | Barekey could not find explicit config or a `barekey.json` file |
+| `INVALID_CONFIGURATION_PROVIDED` | Config shape is incomplete or invalid |
+| `NO_CREDENTIALS_PROVIDED` | No access token and no CLI session were available |
+| `INVALID_CREDENTIALS_PROVIDED` | The stored or provided credentials are invalid |
+| `VARIABLE_NOT_FOUND` | The named variable does not exist |
+| `UNAUTHORIZED` | The API rejected the current token |
+| `REQUIREMENTS_VALIDATION_FAILED` | Your `requirements` schema rejected the resolved config |
+
+Example:
+
+```ts
+import { BarekeyError } from "@barekey/sdk/server";
+
+try {
+  const value = await barekey.get("DATABASE_URL");
+} catch (error) {
+  if (error instanceof BarekeyError) {
+    console.error(error.code, error.requestId);
+  }
+  throw error;
+}
+```
+
+## Practical patterns
+
+- Create one shared client module and import it where needed.
+- Use CLI-session auth locally and `BAREKEY_ACCESS_TOKEN` in production.
+- Run `barekey typegen` after config changes.
+- Use `inspect()` when you need metadata, not just the value.
+- Use standalone mode only on the server side.
+
+For CLI-driven local workflows, read [CLI](/integrations/cli) and [Local development](/integrations/local-development).

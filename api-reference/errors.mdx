@@ -76,7 +76,7 @@ The SDK throws a `BarekeyError` on any non-2xx response:
 import { BarekeyError } from "@barekey/sdk";
 
 try {
-  const value = await barekey.env.get("DATABASE_URL").string();
+  const value = await barekey.get("DATABASE_URL");
 } catch (err) {
   if (err instanceof BarekeyError) {
     switch (err.code) {

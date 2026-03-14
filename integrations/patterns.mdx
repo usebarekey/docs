@@ -1,356 +1,102 @@
 ---
-title: Common patterns
-description: Real-world patterns for using Barekey in production — shared clients, CI/CD, caching, monorepos, and more.
+title: Usage patterns
+description: Practical Barekey SDK and CLI patterns for shared clients, local development, production auth, and type-safe workflows.
 ---
 
-## Shared client module
+## Shared server client
 
-Create the client once in a dedicated module and import it everywhere. Don't instantiate `BarekeyClient` inline or per-request.
+Create one shared server client module:
 
-```typescript lib/barekey.ts
-import { BarekeyClient } from "@barekey/sdk";
+```ts
+import { BarekeyClient } from "@barekey/sdk/server";
 
-export const barekey = new BarekeyClient({
-  baseUrl: "https://api.barekey.dev",
-  orgSlug: process.env.BAREKEY_ORG!,
-  projectSlug: process.env.BAREKEY_PROJECT!,
-  stageSlug: process.env.BAREKEY_STAGE ?? "development",
-  auth: {
-    getAccessToken: async () => process.env.BAREKEY_ACCESS_TOKEN!,
-  },
+export const barekey = new BarekeyClient();
+```
+
+This works especially well when:
+
+- `barekey.json` is committed
+- developers use `barekey auth login`
+- production sets `BAREKEY_ACCESS_TOKEN`
+
+## Production auth pattern
+
+Use a real deployment secret:
+
+```bash
+BAREKEY_ACCESS_TOKEN=bk_at_...
+```
+
+Then:
+
+```ts
+const client = new BarekeyClient({
+  organization: "acme",
+  project: "api",
+  environment: "production",
 });
 ```
 
-Every file that needs variables does:
+This avoids depending on a local CLI session in production.
 
-```typescript
-import { barekey } from "@/lib/barekey";
+## Local developer pattern
 
-const key = await barekey.env.get("STRIPE_SECRET_KEY").string();
-```
-
----
-
-## Stage selection
-
-Don't use `NODE_ENV` directly as the stage name — they don't map cleanly (`NODE_ENV` is `"production"` in a staging deployment too). Use a dedicated env var:
+Commit `barekey.json` and have every developer run:
 
 ```bash
-# .env (committed, no secrets)
-BAREKEY_ORG=acme-42
-BAREKEY_PROJECT=backend-api-1234
-BAREKEY_STAGE=development   # overridden per deployment
-
-# CI/staging deployment
-BAREKEY_STAGE=staging
-
-# Production deployment
-BAREKEY_STAGE=production
+barekey auth login
+barekey typegen
 ```
 
-```typescript
-stageSlug: process.env.BAREKEY_STAGE ?? "development",
+That gives you:
+
+- CLI commands without repeating flags
+- SDK reads without manually wiring tokens
+- generated types in the local editor
+
+## Pull-file pattern
+
+If a tool only understands dotenv files:
+
+```bash
+barekey env pull --out .env.local
 ```
 
-This lets you have a `staging` deployment that uses `NODE_ENV=production` (for correct build optimizations) while targeting the `staging` stage in Barekey.
+Re-run it whenever upstream values change.
 
----
+## Batch-read pattern
 
-## Config initialization at boot
+Read a group of startup values together:
 
-Load all static config in one batch at server startup. Store the resolved values — don't call Barekey per-request for things like database URLs.
-
-```typescript lib/config.ts
-import { barekey } from "./barekey";
-
-interface AppConfig {
-  databaseUrl: string;
-  redisUrl: string;
-  stripeSecretKey: string;
-  smtpPassword: string;
-  maxUploadBytes: number;
-}
-
-let _config: AppConfig | null = null;
-
-export async function getConfig(): Promise<AppConfig> {
-  if (_config) return _config;
-
-  const [dbUrl, redisUrl, stripeKey, smtpPass, maxUpload] =
-    await barekey.env.getMany([
-      { name: "DATABASE_URL" },
-      { name: "REDIS_URL" },
-      { name: "STRIPE_SECRET_KEY" },
-      { name: "SMTP_PASSWORD" },
-      { name: "MAX_UPLOAD_BYTES" },
-    ]);
-
-  _config = {
-    databaseUrl: await dbUrl.string(),
-    redisUrl: await redisUrl.string(),
-    stripeSecretKey: await stripeKey.string(),
-    smtpPassword: await smtpPass.string(),
-    maxUploadBytes: await maxUpload.number(),
-  };
-
-  return _config;
-}
+```ts
+const [databaseUrl, redisUrl, stripeKey] = await barekey.get([
+  "DATABASE_URL",
+  "REDIS_URL",
+  "STRIPE_SECRET_KEY",
+] as const);
 ```
 
-Call `getConfig()` at startup:
+## Experiment pattern
 
-```typescript server.ts
-import { getConfig } from "./lib/config";
+Use deterministic `ab_roll` reads:
 
-const config = await getConfig();
-const db = new Pool({ connectionString: config.databaseUrl });
-```
-
-The memoization means subsequent calls to `getConfig()` return the cached object with zero network calls. To refresh (e.g. after a deploy), restart the process.
-
----
-
-## Per-request dynamic variables
-
-For variables that change frequently or need to be current on every request (feature flags, rate limits, A/B experiments), fetch them per-request rather than at boot:
-
-```typescript middleware/flags.ts
-import { barekey } from "@/lib/barekey";
-
-interface Flags {
-  maintenanceMode: boolean;
-  newCheckout: boolean;
-  rateLimit: number;
-}
-
-export async function resolveFlags(userId: string): Promise<Flags> {
-  const [maintenance, checkout, rateLimit] = await barekey.env.getMany([
-    { name: "MAINTENANCE_MODE" },
-    { name: "NEW_CHECKOUT", seed: userId, key: "checkout-v3" },
-    { name: "RATE_LIMIT_RPS" },
-  ]);
-
-  return {
-    maintenanceMode: await maintenance.boolean(),
-    newCheckout: (await checkout.string()) === "enabled",
-    rateLimit: await rateLimit.number(),
-  };
-}
-```
-
-Attach resolved flags to the request context so downstream handlers don't need to call Barekey separately:
-
-```typescript
-app.use(async (req, res, next) => {
-  res.locals.flags = await resolveFlags(req.user?.id ?? req.ip);
-  next();
+```ts
+const variant = await barekey.get("CHECKOUT_FLOW", {
+  seed: user.id,
+  key: "checkout-v2",
 });
 ```
 
----
+## Public-variable pattern
 
-## A/B experiment cohorts
+Use the public client for browser-safe reads:
 
-Use stable seeds to keep users in consistent experiment buckets across sessions and deployments.
+```ts
+import { PublicBarekeyClient } from "@barekey/sdk/public";
 
-```typescript lib/experiments.ts
-import { barekey } from "./barekey";
-
-export async function getExperiments(userId: string) {
-  const experimentNames = [
-    "CHECKOUT_FLOW",
-    "ONBOARDING_STEPS",
-    "PRICING_PAGE",
-    "SEARCH_RANKING",
-  ] as const;
-
-  const results = await barekey.env.getMany(
-    experimentNames.map((name) => ({
-      name,
-      seed: userId,
-      key: `exp-2026-q1-${name.toLowerCase()}`,
-    }))
-  );
-
-  return Object.fromEntries(
-    experimentNames.map((name, i) => [name, results[i]])
-  ) as Record<(typeof experimentNames)[number], { string: () => Promise<string> }>;
-}
-```
-
-Usage in a route:
-
-```typescript
-const experiments = await getExperiments(user.id);
-const checkoutVariant = await experiments.CHECKOUT_FLOW.string();
-// → "control" | "treatment"
-```
-
-The `key` includes a date prefix (`exp-2026-q1-`) so that starting a new experiment round resets all bucket assignments without needing to touch the `seed` logic.
-
----
-
-## Feature flag system
-
-Store all flags in a single JSON variable for minimal API calls. Gate releases behind flags without redeploying:
-
-```typescript
-// barekey env new FEATURE_FLAGS --type json
-// barekey env set FEATURE_FLAGS '{
-//   "newBilling": false,
-//   "betaInvitesOnly": true,
-//   "debugToolbar": false,
-//   "maxProjectsPerOrg": 10
-// }'
-
-interface FeatureFlags {
-  newBilling: boolean;
-  betaInvitesOnly: boolean;
-  debugToolbar: boolean;
-  maxProjectsPerOrg: number;
-}
-
-// Load once at startup
-export const flags = await barekey.env
-  .get("FEATURE_FLAGS")
-  .json<FeatureFlags>();
-```
-
-For flags that need to change without a server restart, fetch them per-request:
-
-```typescript
-async function getFlags(): Promise<FeatureFlags> {
-  return barekey.env.get("FEATURE_FLAGS").json<FeatureFlags>();
-}
-
-// In a route handler:
-const { newBilling } = await getFlags();
-```
-
----
-
-## CI/CD pipelines
-
-In CI, use the CLI to fetch secrets at pipeline start rather than hard-coding them as CI secrets.
-
-```yaml .github/workflows/deploy.yml
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Barekey CLI
-        run: npm install -g @barekey/cli
-
-      - name: Pull deployment secrets
-        env:
-          BAREKEY_ACCESS_TOKEN: ${{ secrets.BAREKEY_CI_TOKEN }}
-        run: |
-          barekey env pull \
-            --org acme-42 \
-            --project backend-api-1234 \
-            --stage production \
-            --format dotenv \
-            --out .env.production
-        
-      - name: Deploy
-        run: ./deploy.sh
-        env:
-          ENV_FILE: .env.production
-```
-
-Only `BAREKEY_CI_TOKEN` needs to be stored as a CI secret — it's a read-only Barekey access token. All other secrets are fetched from Barekey at pipeline time and are never stored in the CI secret store.
-
-Alternatively, use the HTTP API directly in scripts:
-
-```bash
-#!/usr/bin/env bash
-response=$(curl -sf -X POST https://api.barekey.dev/v1/env/evaluate \
-  -H "Authorization: Bearer ${BAREKEY_ACCESS_TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{"orgSlug":"acme-42","projectSlug":"backend-api-1234","stageSlug":"production","name":"DEPLOY_WEBHOOK_URL"}')
-
-webhook_url=$(echo "$response" | jq -r '.value')
-curl -sf -X POST "$webhook_url" -d '{"status":"deploying"}'
-```
-
----
-
-## Monorepos
-
-If multiple packages in your monorepo share the same Barekey project, create the client in one shared package and import it from each app:
-
-```
-packages/
-  barekey/           ← shared client package
-    src/index.ts
-  api/               ← Express API
-  web/               ← Next.js app
-  workers/           ← Cloudflare Workers
-```
-
-```typescript packages/barekey/src/index.ts
-import { BarekeyClient } from "@barekey/sdk";
-
-export function createBarekeyClient(token: string, stage: string) {
-  return new BarekeyClient({
-    baseUrl: "https://api.barekey.dev",
-    orgSlug: process.env.BAREKEY_ORG!,
-    projectSlug: process.env.BAREKEY_PROJECT!,
-    stageSlug: stage,
-    auth: { getAccessToken: async () => token },
-  });
-}
-
-export type { BarekeyClient };
-```
-
-Each app creates its own instance with its own stage:
-
-```typescript packages/api/src/lib/barekey.ts
-import { createBarekeyClient } from "@acme/barekey";
-
-export const barekey = createBarekeyClient(
-  process.env.BAREKEY_ACCESS_TOKEN!,
-  process.env.BAREKEY_STAGE ?? "development"
-);
-```
-
----
-
-## Graceful degradation
-
-If Barekey is unavailable (network partition, service outage), you should decide per-variable whether to fail hard or fall back to a safe default.
-
-```typescript
-async function getConfig() {
-  try {
-    return await barekey.env.getMany([
-      { name: "DATABASE_URL" },
-      { name: "RATE_LIMIT_RPS" },
-    ]);
-  } catch (err) {
-    if (err instanceof BarekeyError && err.code === "BILLING_UNAVAILABLE") {
-      // Billing system down — return hardcoded safe defaults
-      // Do NOT fall back for DATABASE_URL — can't operate without it
-      console.warn("Barekey billing unavailable, using rate limit fallback");
-    }
-    throw err; // Any other error is fatal at startup
-  }
-}
-```
-
-For A/B variables specifically, fall back to the control variant on error rather than crashing a request:
-
-```typescript
-async function getVariant(name: string, userId: string): Promise<string> {
-  try {
-    return await barekey.env
-      .get(name, { seed: userId, key: "exp-2026-q1" })
-      .string();
-  } catch {
-    return "control"; // Safe fallback — never crashes the request
-  }
-}
+const publicBarekey = new PublicBarekeyClient({
+  organization: "acme",
+  project: "web",
+  environment: "production",
+});
 ```

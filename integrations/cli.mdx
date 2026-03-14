@@ -1,16 +1,20 @@
 ---
-title: CLI reference
-description: Complete command reference for the Barekey CLI — authenticate, manage variables, and pull secrets to a local .env file.
+title: CLI
+description: Full Barekey CLI guide, including login, target resolution, `barekey.json`, environment commands, pull workflows, and type generation.
 ---
 
-## Installation
+The Barekey CLI is the fastest way to work with Barekey day to day.
+
+Use it to:
+
+- log in on a machine
+- create, update, list, and delete variables
+- pull resolved values into files
+- generate SDK types
+
+## Install
 
 <Tabs>
-  <Tab title="Bun">
-    ```bash
-    bun add -g @barekey/cli
-    ```
-  </Tab>
   <Tab title="npm">
     ```bash
     npm install -g @barekey/cli
@@ -26,301 +30,346 @@ description: Complete command reference for the Barekey CLI — authenticate, ma
     yarn global add @barekey/cli
     ```
   </Tab>
+  <Tab title="bun">
+    ```bash
+    bun add -g @barekey/cli
+    ```
+  </Tab>
 </Tabs>
 
----
-
-## Target resolution
-
-All commands need to know which org, project, and stage to operate on. The CLI resolves the target in this priority order:
-
-1. **Command-line flags** — `--org`, `--project`, `--stage`
-2. **`barekey.json`** — in the current directory or any parent directory
-3. **Default stage** — if no stage is specified, the project's default stage (`development`) is used
-
-If the target cannot be resolved, the command exits with an error.
-
----
-
-## Auth commands
+## Authentication
 
 ### `barekey auth login`
 
-Opens a browser-based device authorization flow. Prints a user code to enter in the browser, then waits for you to approve the session.
+Starts the browser-based device flow:
 
 ```bash
 barekey auth login
 ```
 
-On success, stores the access token (1-hour TTL) and refresh token (30-day TTL) locally. The CLI automatically refreshes the access token using the refresh token when it expires.
+Optional:
 
-**Flags:**
+```bash
+barekey auth login --base-url https://api.barekey.dev
+```
 
-| Flag | Description |
-|---|---|
-| `--org <slug>` | Pre-select the org to log into. If omitted, the browser prompts for selection. |
+What it does:
 
----
+- starts a device authorization request
+- prints the verification URL and code
+- opens the browser when possible
+- stores the session locally after approval
 
 ### `barekey auth whoami`
 
-Prints the currently authenticated account and active org.
-
 ```bash
 barekey auth whoami
-# Authenticated as: jane@example.com (org: acme-42)
+barekey auth whoami --json
 ```
 
----
-
 ### `barekey auth logout`
-
-Revokes the current session and deletes the stored token.
 
 ```bash
 barekey auth logout
 ```
 
-The refresh token is invalidated server-side immediately. Any active access tokens from this session will return `401` on their next use.
+Top-level aliases also exist:
 
----
+- `barekey login`
+- `barekey whoami`
+- `barekey logout`
 
-## Variable commands
+## How target resolution works
 
-All variable commands accept these target flags:
+Every environment command needs a target:
 
-| Flag | Description |
-|---|---|
-| `--org <slug>` | Override the org slug |
-| `--project <slug>` | Override the project slug |
-| `--stage <name>` | Override the stage name |
-| `--json` | Output as machine-readable JSON instead of a table |
+- organization
+- project
+- stage
 
----
+The CLI resolves those from:
 
-### `barekey env new`
+1. command flags
+2. `barekey.json`
+3. stored CLI session org for organization only
 
-Creates a new variable (without setting a value). The variable must not already exist in the target stage.
+### Target flags
 
-```bash
-barekey env new <NAME> [flags]
-```
-
-**Flags:**
-
-| Flag | Description |
-|---|---|
-| `--type <type>` | Declared type: `string`, `boolean`, `int64`, `float`, `date`, `json`. Defaults to `string`. |
-| `--ab` | Create as an `ab_roll` kind instead of `secret`. Requires two values at set time. |
-
-**Examples:**
+Most `env` and `typegen` commands accept:
 
 ```bash
-# Create a string secret
-barekey env new DATABASE_URL --type string
-
-# Create a boolean flag
-barekey env new FEATURE_ENABLED --type boolean
-
-# Create an A/B variable
-barekey env new CHECKOUT_FLOW --type string --ab
+--org <slug>
+--project <slug>
+--stage <slug>
 ```
 
----
+### `barekey.json`
 
-### `barekey env set`
-
-Sets the value of an existing variable.
-
-```bash
-barekey env set <NAME> <VALUE> [flags]
-```
-
-For `ab_roll` variables:
-
-```bash
-barekey env set <NAME> --ab <VALUE_A> <VALUE_B> [flags]
-```
-
-**Flags:**
-
-| Flag | Description |
-|---|---|
-| `--ab <A> <B>` | Set both A and B values for an `ab_roll` variable |
-| `--chance <float>` | Probability of returning value A (0.0–1.0). Only for `ab_roll`. |
-
-**Examples:**
-
-```bash
-# Set a secret value
-barekey env set DATABASE_URL "postgres://rds.example.com:5432/myapp"
-
-# Set both values and chance for an ab_roll
-barekey env set CHECKOUT_FLOW --ab "original" "redesigned" --chance 0.2
-
-# Update chance without changing values
-barekey env set CHECKOUT_FLOW --chance 0.5
-```
-
----
-
-### `barekey env list`
-
-Lists all variables in the target stage. Shows name, kind, and declared type. Does not reveal values.
-
-```bash
-barekey env list [flags]
-```
-
-**Example output:**
-
-```
-NAME              KIND      TYPE     UPDATED
-DATABASE_URL      secret    string   2 hours ago
-FEATURE_ENABLED   secret    boolean  1 day ago
-CHECKOUT_FLOW     ab_roll   string   3 days ago
-```
-
-**With `--json`:**
-
-```json
-[
-  {
-    "name": "DATABASE_URL",
-    "kind": "secret",
-    "declaredType": "string",
-    "createdAtMs": 1700000000000,
-    "updatedAtMs": 1700050000000
-  }
-]
-```
-
----
-
-### `barekey env get`
-
-Fetches and prints the value of a single variable.
-
-```bash
-barekey env get <NAME> [flags]
-```
-
-**Flags:**
-
-| Flag | Description |
-|---|---|
-| `--seed <value>` | Seed for deterministic `ab_roll` evaluation |
-| `--key <value>` | Namespace key for deterministic evaluation (used with `--seed`) |
-| `--json` | Output result as JSON with metadata |
-
-**Examples:**
-
-```bash
-# Get a secret
-barekey env get DATABASE_URL
-
-# Get with deterministic ab_roll resolution
-barekey env get CHECKOUT_FLOW --seed "user_abc123" --key "checkout-v1"
-```
-
-**With `--json`:**
+Recommended project file:
 
 ```json
 {
-  "name": "CHECKOUT_FLOW",
-  "kind": "ab_roll",
-  "value": "redesigned",
-  "decision": "b",
-  "declaredType": "string"
+  "organization": "acme",
+  "project": "web",
+  "environment": "development",
+  "config": {
+    "typegen": "semantic",
+    "mode": "centralized"
+  }
 }
 ```
 
----
+Supported aliases:
 
-### `barekey env get-many`
+- `org` for `organization`
+- `stage` for `environment`
 
-Fetches multiple variables in a single request.
+### Missing target errors
 
-```bash
-barekey env get-many --names <NAME1> <NAME2> ... [flags]
-```
+If the CLI cannot resolve `project` and `environment`, it fails and tells you to either:
 
-**Flags:**
+- pass `--project` and `--stage`
+- or create a `barekey.json`
 
-| Flag | Description |
-|---|---|
-| `--names <n...>` | Space-separated list of variable names |
-| `--json` | Output as JSON array |
+## Command reference
 
-**Example:**
+## `barekey env list`
 
-```bash
-barekey env get-many --names DATABASE_URL REDIS_URL MAX_CONNECTIONS --json
-```
-
----
-
-### `barekey env delete`
-
-Deletes a variable from the target stage. Requires confirmation unless `--yes` is passed.
+List variables in the resolved stage:
 
 ```bash
-barekey env delete <NAME> [flags]
+barekey env list
+barekey env list --json
 ```
 
-**Flags:**
+The non-JSON output includes:
 
-| Flag | Description |
-|---|---|
-| `--yes` | Skip the confirmation prompt |
+- name
+- visibility
+- kind
+- declared type
 
-**Example:**
+## `barekey env get`
+
+Read one resolved variable:
 
 ```bash
-barekey env delete OLD_API_KEY --yes
+barekey env get DATABASE_URL
 ```
 
----
-
-### `barekey env pull`
-
-Fetches all variables in the target stage and writes them to a file.
+Options:
 
 ```bash
-barekey env pull [flags]
+barekey env get CHECKOUT_FLOW --seed user-42 --key checkout-v1
+barekey env get DATABASE_URL --json
 ```
 
-**Flags:**
+Flags:
 
-| Flag | Description |
-|---|---|
-| `--format <fmt>` | Output format. Currently supports `dotenv`. |
-| `--out <path>` | Output file path. Defaults to `.env`. |
-| `--seed <value>` | Seed for deterministic `ab_roll` evaluation across all variables |
-| `--key <value>` | Namespace key for deterministic evaluation (used with `--seed`) |
+| Flag | Meaning |
+| --- | --- |
+| `--seed <value>` | deterministic seed for `ab_roll` |
+| `--key <value>` | deterministic namespace key |
+| `--json` | machine-readable output |
 
-**Examples:**
+## `barekey env get-many`
+
+Read multiple values in one command:
 
 ```bash
-# Pull development stage to .env.local
-barekey env pull --format dotenv --out .env.local
-
-# Pull staging stage
-barekey env pull --stage staging --format dotenv --out .env.staging
-
-# Pull with deterministic ab_roll resolution
-barekey env pull --format dotenv --out .env.local --seed "local-dev" --key "local"
+barekey env get-many --names DATABASE_URL,REDIS_URL
+barekey env get-many --names DATABASE_URL,REDIS_URL --json
 ```
 
-The output file contains one `KEY="value"` line per variable, sorted alphabetically.
+Flags:
 
-```bash .env.local
-CHECKOUT_FLOW="original"
-DATABASE_URL="postgres://localhost:5432/myapp_dev"
-FEATURE_ENABLED="true"
+| Flag | Meaning |
+| --- | --- |
+| `--names <csv>` | comma-separated variable names |
+| `--seed <value>` | deterministic seed for `ab_roll` values |
+| `--key <value>` | deterministic namespace key |
+| `--json` | machine-readable output |
+
+## `barekey env new`
+
+Create a variable with its first value:
+
+```bash
+barekey env new DATABASE_URL "postgres://localhost:5432/app"
 ```
 
-<Warning>
-  Pulled files contain plaintext secrets. Add the output path to `.gitignore`
-  before running `env pull`.
-</Warning>
+Flags:
+
+| Flag | Meaning |
+| --- | --- |
+| `--type <type>` | declared type: `string`, `boolean`, `int64`, `float`, `date`, `json` |
+| `--visibility <visibility>` | `private` or `public` |
+| `--ab <value-b>` | create an `ab_roll` with A value from the positional `<value>` and B value from `--ab` |
+| `--chance <number>` | required when using `--ab`, from `0` to `1` |
+| `--json` | machine-readable output |
+
+Example:
+
+```bash
+barekey env new FEATURE_ENABLED true --type boolean
+barekey env new PUBLIC_TITLE "Barekey" --visibility public
+barekey env new CHECKOUT_FLOW original --ab redesigned --chance 0.2
+```
+
+## `barekey env set`
+
+Upsert a variable:
+
+```bash
+barekey env set DATABASE_URL "postgres://localhost:5432/app_v2"
+```
+
+This creates the variable if it does not exist and updates it if it does.
+
+It accepts the same flags as `env new`.
+
+Examples:
+
+```bash
+barekey env set FEATURE_ENABLED false --type boolean
+barekey env set CHECKOUT_FLOW control --ab treatment --chance 0.5
+barekey env set PUBLIC_TITLE "Barekey Docs" --visibility public
+```
+
+## `barekey env delete`
+
+Delete a variable:
+
+```bash
+barekey env delete OLD_KEY
+```
+
+Flags:
+
+| Flag | Meaning |
+| --- | --- |
+| `--yes` | skip the confirmation prompt |
+| `--ignore-missing` | do not fail if the variable does not exist |
+| `--json` | machine-readable output |
+
+Examples:
+
+```bash
+barekey env delete OLD_KEY --yes
+barekey env delete OLD_KEY --yes --ignore-missing
+```
+
+## `barekey env pull`
+
+Resolve the whole stage and either print or write the result.
+
+```bash
+barekey env pull
+barekey env pull --out .env.local
+barekey env pull --format json --out barekey.local.json
+```
+
+Flags:
+
+| Flag | Meaning |
+| --- | --- |
+| `--format <type>` | `dotenv` or `json` |
+| `--out <path>` | write to a file instead of stdout |
+| `--seed <value>` | deterministic seed for `ab_roll` values |
+| `--key <value>` | deterministic namespace key |
+| `--redact` | if printing to stdout in a non-TTY context, show only a summary |
+
+Examples:
+
+```bash
+barekey env pull --out .env.local
+barekey env pull --format json --out barekey.local.json
+barekey env pull --seed user-42 --key checkout-v1 --out .env.local
+```
+
+### Output formats
+
+`dotenv`:
+
+```dotenv
+DATABASE_URL=postgres://localhost:5432/app
+FEATURE_ENABLED=true
+```
+
+`json`:
+
+```json
+{
+  "DATABASE_URL": "postgres://localhost:5432/app",
+  "FEATURE_ENABLED": "true"
+}
+```
+
+## `barekey typegen`
+
+Generate SDK types into your installed `@barekey/sdk` package:
+
+```bash
+barekey typegen
+```
+
+Watch mode:
+
+```bash
+barekey typegen --watch
+barekey typegen --watch --interval 3000
+```
+
+Flags:
+
+| Flag | Meaning |
+| --- | --- |
+| `--watch` | keep polling and regenerate when needed |
+| `--interval <ms>` | watch poll interval in milliseconds |
+| `--org <slug>` | override organization |
+| `--project <slug>` | override project |
+| `--stage <slug>` | override stage |
+
+## Day-to-day recipes
+
+### Create a variable and verify it
+
+```bash
+barekey env new DATABASE_URL "postgres://localhost:5432/app" --type string
+barekey env get DATABASE_URL
+```
+
+### Update a public variable
+
+```bash
+barekey env set PUBLIC_TITLE "Barekey Docs" --visibility public
+```
+
+### Pull local dev values
+
+```bash
+barekey env pull --out .env.local
+```
+
+### Pull JSON for scripts
+
+```bash
+barekey env pull --format json --out barekey.local.json
+```
+
+### Regenerate SDK types after variable changes
+
+```bash
+barekey typegen
+```
+
+## Notes and gotchas
+
+- `env new` requires an initial `<value>`.
+- `env set` is the upsert command.
+- `get-many` expects a comma-separated `--names` value.
+- The CLI can reuse your saved login automatically.
+- `barekey.json` is safe to commit because it contains configuration, not secrets.
+- Pulled `.env` files are not safe to commit.
+
+For SDK usage details, read [JavaScript SDK](/integrations/javascript-sdk).

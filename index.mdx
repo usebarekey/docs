@@ -1,50 +1,91 @@
 ---
 title: Barekey
-description: Encrypted environment variables for developer teams. Manage secrets across orgs, projects, and stages with a type-safe SDK, a CLI, and a direct HTTP API.
+description: Barekey gives you one place to manage variables, then use them through a TypeScript SDK, a CLI, or a local standalone mode for .env workflows.
 ---
 
-Barekey stores and serves encrypted environment variables for developer teams. Variables are scoped to an **org → project → stage** hierarchy, encrypted at rest with per-project keys, and served at runtime to your application — either through the SDK or directly via the HTTP API.
+Barekey is a variable platform for teams that want better ergonomics than hand-managed `.env` files. In practice, most teams use it in one of two ways:
+
+- The SDK reads variables directly in your app.
+- The CLI manages variables and pulls them into local files when you want a classic `.env` workflow.
+
+This documentation is organized around those two workflows first.
 
 <CardGroup cols={2}>
   <Card title="Quickstart" icon="bolt" href="/quickstart">
-    Install the CLI, authenticate, and read your first secret in under five minutes.
+    Install the CLI, add `barekey.json`, create a variable, and read it with the SDK.
   </Card>
-  <Card title="How Barekey works" icon="layer-group" href="/concepts/how-barekey-works">
-    Understand the org → project → stage → variable model and the resolution flow.
+  <Card title="SDK guide" icon="code" href="/integrations/javascript-sdk">
+    Learn constructor options, auth resolution, typegen, dynamic reads, public reads, and standalone mode.
   </Card>
-  <Card title="JavaScript SDK" icon="js" href="/integrations/javascript-sdk">
-    Type-safe client for Node.js and edge runtimes. Fetches and coerces variables at request time.
+  <Card title="CLI guide" icon="terminal" href="/integrations/cli">
+    Learn every command, target resolution rules, output modes, and practical day-to-day workflows.
   </Card>
-  <Card title="CLI reference" icon="terminal" href="/integrations/cli">
-    Manage variables from the command line. Authenticate, inspect, write, and pull to `.env`.
-  </Card>
-  <Card title="API reference" icon="code" href="/api-reference/introduction">
-    Full HTTP API documentation — evaluate, manage, and pull variables with a Bearer token.
-  </Card>
-  <Card title="Security model" icon="lock" href="/concepts/security-model">
-    Envelope encryption with AES-GCM-256. What is stored, what is hashed, and what is never persisted.
+  <Card title="Local development" icon="laptop" href="/integrations/local-development">
+    Use `barekey.json`, pull values into `.env.local`, or point the SDK at local `.env` files with standalone mode.
   </Card>
 </CardGroup>
 
-## How variables are organized
+## Recommended workflows
 
-Every variable belongs to a project stage. A stage is a named environment (like `development`, `staging`, or `production`) inside a project, which lives inside an org. Values are isolated per stage — there is no automatic promotion or inheritance between them.
+### Use the SDK in application code
 
+Use `@barekey/sdk/server` when your app should resolve variables directly:
+
+- server apps
+- worker runtimes
+- edge functions
+- scripts that already run in Node, Bun, or another `fetch`-compatible runtime
+
+This is the best fit when you want current values at runtime, generated types, and fewer plaintext files on disk.
+
+### Use the CLI for setup, management, and local files
+
+Use `@barekey/cli` when you want to:
+
+- log in once on a machine
+- create or update variables from the terminal
+- inspect stage values
+- pull resolved values into `.env`, `.env.local`, or JSON
+- run `typegen` for your installed SDK package
+
+### Use standalone mode for local `.env` compatibility
+
+The server SDK also supports `config.mode: "standalone"`. In that mode it reads local `.env*` files instead of calling the Barekey API. That gives you one SDK API for both:
+
+- centralized Barekey-backed environments
+- purely local development and testing
+
+## Core model
+
+Variables are scoped by:
+
+```text
+organization -> project -> stage -> variable
 ```
-org: acme-42
-└── project: backend-api-1234
-    ├── stage: development   ← DATABASE_URL = postgres://localhost/dev
-    ├── stage: staging       ← DATABASE_URL = postgres://rds-staging/app
-    └── stage: production    ← DATABASE_URL = postgres://rds-prod/app
-```
 
-Variables are encrypted at rest using a per-project data encryption key (DEK). The DEK itself is wrapped by a master key that lives outside the database. Plaintext is only produced during an authorized API request and is never persisted.
+- An **organization** is your team scope.
+- A **project** is an app or service inside that organization.
+- A **stage** is an environment such as `development`, `staging`, or `production`.
+- A **variable** is a named value inside one project stage.
 
-## Authentication
+Barekey currently documents these shipped variable kinds:
 
-There are two ways to authenticate against the API:
+- `secret`
+- `ab_roll`
 
-- **Clerk JWT** — for web dashboard access and server-side integrations where your backend already issues Clerk tokens.
-- **CLI access token** — issued by the device code flow (`barekey auth login`), valid for one hour and refreshable for up to 30 days.
+## What to read next
 
-Both tokens are passed as `Authorization: Bearer <token>` on every request.
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="play" href="/quickstart">
+    Start with a complete first-time setup.
+  </Card>
+  <Card title="JavaScript SDK" icon="js" href="/integrations/javascript-sdk">
+    Full SDK guide and configuration reference.
+  </Card>
+  <Card title="CLI" icon="terminal" href="/integrations/cli">
+    Full CLI guide and command reference.
+  </Card>
+  <Card title="Error reference" icon="triangle-exclamation" href="/api-reference/errors">
+    Understand SDK and API error codes.
+  </Card>
+</CardGroup>

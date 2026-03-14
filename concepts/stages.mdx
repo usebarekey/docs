@@ -1,100 +1,68 @@
 ---
 title: Stages
-description: How stages isolate variables between environments, how to target a specific stage, and why stage-level isolation matters.
+description: Stages are the environment boundary in Barekey. They decide which variable set your CLI and SDK target.
 ---
 
-A **stage** is a named environment within a project. Every variable belongs to exactly one stage. There is no sharing or inheritance between stages — the same key in `development` and `production` are completely independent rows with independent encrypted values.
+A stage is an environment inside a project, such as:
 
----
+- `development`
+- `staging`
+- `production`
 
-## Default stages
+Variables are isolated per stage. The same key name can exist in multiple stages with different values.
 
-When you create a project, Barekey automatically provisions three stages:
+## Why stages matter
 
-| Stage | Purpose |
-|---|---|
-| `development` | Local development — typically points to local services |
-| `staging` | Pre-production — mirrors production config with test data |
-| `production` | Live traffic — most sensitive, most restricted access |
+If you store:
 
-One stage is marked `isDefault`. This is the stage the CLI targets if you don't specify `--stage` and there is no `stage` field in `barekey.json`. By default, `development` is the default stage.
+- `DATABASE_URL` in `development`
+- `DATABASE_URL` in `production`
 
----
+those are two separate variables with separate values.
 
-## Stage isolation
+Changing one does not affect the other.
 
-Variables are completely isolated per stage. This means:
+## How the CLI targets a stage
 
-- Setting `DATABASE_URL` in `development` has no effect on `staging` or `production`.
-- Deleting a variable from `staging` does not remove it from `production`.
-- Reading a variable from `production` requires authorization against the production org/project scope — the same token can't bypass stage isolation.
+The CLI resolves the stage from:
 
-If you want the same value in two stages, you must explicitly write it to both. This is intentional — accidental promotion of wrong values is prevented at the data model level.
+1. `--stage`
+2. `barekey.json`
 
----
-
-## Targeting a stage
-
-### In `barekey.json`
-
-```json barekey.json
-{
-  "org": "acme-42",
-  "project": "backend-api-1234",
-  "stage": "production"
-}
-```
-
-### CLI flags
-
-`--stage` overrides `barekey.json` and the default:
+Example:
 
 ```bash
-# List production variables
 barekey env list --stage production
-
-# Pull staging to a local file
-barekey env pull --stage staging --format dotenv --out .env.staging
+barekey env pull --stage staging --out .env.staging
 ```
 
-### SDK constructor
+## How the SDK targets a stage
 
-```typescript
+With explicit configuration:
+
+```ts
+import { BarekeyClient } from "@barekey/sdk/server";
+
 const barekey = new BarekeyClient({
-  baseUrl: "https://api.barekey.dev",
-  orgSlug: "acme-42",
-  projectSlug: "backend-api-1234",
-  stageSlug: "production",       // ← set the target stage here
-  auth: { getAccessToken: async () => process.env.BAREKEY_TOKEN! },
+  organization: "acme",
+  project: "api",
+  environment: "production",
 });
 ```
 
-### HTTP API
-
-All environment API endpoints accept `stageSlug` in the request body:
+Or through `barekey.json`:
 
 ```json
 {
-  "orgSlug": "acme-42",
-  "projectSlug": "backend-api-1234",
-  "stageSlug": "production",
-  "name": "DATABASE_URL"
+  "organization": "acme",
+  "project": "api",
+  "environment": "production"
 }
 ```
 
----
+## Good stage habits
 
-## Production access
-
-Production stages should be treated with the most caution:
-
-- Rotate CLI access tokens regularly; don't share them between team members.
-- In CI/CD pipelines, use a dedicated token stored as a CI secret. Never use a personal token.
-- Avoid pulling production variables to local `.env` files — use `staging` for local integration testing.
-- The evaluation endpoint requires a valid Bearer token on every request; there is no anonymous read path.
-
----
-
-## Custom stages
-
-Beyond the default three, you can create additional stages from the dashboard — for example `preview`, `canary`, or `load-test`. Custom stages behave identically to the default ones.
+- keep `development`, `staging`, and `production` values separate
+- commit `barekey.json` so teammates target the same default stage
+- use `--stage` explicitly in scripts when the target matters
+- use production tokens and production stages carefully

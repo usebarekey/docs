@@ -42,12 +42,12 @@
             ]
           },
           {
-            "group": "Integrations",
+            "group": "SDK and CLI",
             "pages": [
               "integrations/javascript-sdk",
-              "integrations/patterns",
               "integrations/cli",
-              "integrations/local-development"
+              "integrations/local-development",
+              "integrations/patterns"
             ]
           }
         ]

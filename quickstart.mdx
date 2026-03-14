@@ -1,23 +1,23 @@
 ---
 title: Quickstart
-description: Authenticate with the CLI, create a variable, and read it from your application in under five minutes.
+description: Install the CLI, configure a project, create a variable, and read it with the Barekey SDK.
 ---
+
+This quickstart uses the actual shipped workflow:
+
+1. Install and log into the CLI.
+2. Add a `barekey.json` file.
+3. Create a variable.
+4. Read it with `@barekey/sdk/server`.
 
 ## Prerequisites
 
-- Node.js 18+ or Bun 1.0+ (for the SDK)
-- A Barekey account — [sign up at barekey.dev](https://barekey.dev)
+- Node.js 18+ or Bun
+- a Barekey account
 
----
-
-## 1. Install and authenticate the CLI
+## 1. Install the CLI
 
 <Tabs>
-  <Tab title="Bun">
-    ```bash
-    bun add -g @barekey/cli
-    ```
-  </Tab>
   <Tab title="npm">
     ```bash
     npm install -g @barekey/cli
@@ -33,97 +33,68 @@ description: Authenticate with the CLI, create a variable, and read it from your
     yarn global add @barekey/cli
     ```
   </Tab>
+  <Tab title="bun">
+    ```bash
+    bun add -g @barekey/cli
+    ```
+  </Tab>
 </Tabs>
 
-Run the device login flow. This opens your browser to authorize the CLI session:
+Log in:
 
 ```bash
 barekey auth login
 ```
 
-The CLI prints a short user code and a URL:
-
-```
-Open your browser and visit:
-  https://barekey.dev/auth/device
-
-Enter code: ABCD-1234
-
-Waiting for authorization...
-```
-
-After you approve in the browser, the CLI receives an access token (valid 1 hour) and a refresh token (valid 30 days). The token is stored locally and used automatically for all subsequent commands.
-
-Verify the session:
+Check the session:
 
 ```bash
 barekey auth whoami
-# → Authenticated as: your@email.com (org: acme-42)
 ```
 
----
+## 2. Add `barekey.json`
 
-## 2. Create a `barekey.json` config file
+Create a `barekey.json` file in your project root:
 
-In your project root, create a `barekey.json` file that tells the CLI and SDK which org, project, and stage to target:
-
-```json barekey.json
+```json
 {
-  "org": "acme-42",
-  "project": "backend-api-1234",
-  "stage": "development"
+  "organization": "acme",
+  "project": "web",
+  "environment": "development"
 }
 ```
 
-| Field | Type | Description |
-| ------- | ------ | ----------- |
-| `org` | string | Your org slug (visible in the dashboard URL) |
-| `project` | string | Project slug |
-| `stage` | string | Stage name — one of `development`, `staging`, `production` or a custom stage |
+Barekey also accepts the aliases `org` and `stage`, but the canonical keys are:
 
-You can override any of these at runtime using `--org`, `--project`, and `--stage` flags. CLI flags take precedence over `barekey.json`.
+- `organization`
+- `project`
+- `environment`
 
----
+Once this file exists, most CLI commands and SDK clients can resolve the target automatically.
 
-## 3. Create your first variable
+## 3. Create a variable
 
-```bash
-barekey env new DATABASE_URL --type string
-```
-
-Set its value:
+Create a variable with an initial value:
 
 ```bash
-barekey env set DATABASE_URL "postgres://localhost:5432/myapp_dev"
+barekey env new DATABASE_URL "postgres://localhost:5432/app" --type string
 ```
 
-Confirm it was created:
-
-```bash
-barekey env list
-# NAME          KIND     TYPE
-# DATABASE_URL  secret   string
-```
-
-Read a single value:
+Read it back:
 
 ```bash
 barekey env get DATABASE_URL
-# postgres://localhost:5432/myapp_dev
 ```
 
----
+Update it later with `env set`:
 
-## 4. Read variables in your application
+```bash
+barekey env set DATABASE_URL "postgres://localhost:5432/app_v2"
+```
 
-Install the SDK:
+## 4. Install the SDK
 
 <Tabs>
-  <Tab title="Bun">
-    ```bash
-    bun add @barekey/sdk
-    ```
-  </Tab>
   <Tab title="npm">
     ```bash
     npm install @barekey/sdk
@@ -139,69 +110,100 @@ Install the SDK:
     yarn add @barekey/sdk
     ```
   </Tab>
+  <Tab title="bun">
+    ```bash
+    bun add @barekey/sdk
+    ```
+  </Tab>
 </Tabs>
 
-Create a Barekey client and fetch a variable at request time:
+## 5. Read the variable in code
 
-```typescript
-import { BarekeyClient } from "@barekey/sdk";
+Create a shared client:
 
-const barekey = new BarekeyClient({
-  baseUrl: "https://api.barekey.dev",
-  orgSlug: "acme-42",
-  projectSlug: "backend-api-1234",
-  stageSlug: "development",
-  auth: {
-    getAccessToken: async () => process.env.BAREKEY_ACCESS_TOKEN!,
-  },
-});
+```ts
+import { BarekeyClient } from "@barekey/sdk/server";
 
-// Fetch and coerce to the declared type
-const dbUrl = await barekey.env.get("DATABASE_URL").string();
-console.log(dbUrl); // postgres://localhost:5432/myapp_dev
+export const barekey = new BarekeyClient();
 ```
 
-For a server-side integration, the access token is a CLI token (`bk_at_...`) stored in a real environment variable, or a Clerk JWT if your backend already issues those.
+Because `barekey.json` is present, the client can resolve:
 
----
+- `organization`
+- `project`
+- `environment`
 
-## 5. Pull variables to a local `.env` file
+And because you already logged in with the CLI, the SDK can reuse the local CLI session for auth during local development.
 
-For local development you can pull all variables for a stage to a `.env` file:
+Read your variable:
+
+```ts
+import { barekey } from "./barekey";
+
+const databaseUrl = await barekey.get("DATABASE_URL");
+console.log(databaseUrl);
+```
+
+`await barekey.get("DATABASE_URL")` returns the parsed value for the variable's declared type.
+
+If you want metadata too, use `inspect()`:
+
+```ts
+const result = await barekey.get("DATABASE_URL").inspect();
+
+console.log(result.value);
+console.log(result.rawValue);
+console.log(result.kind);
+console.log(result.visibility);
+```
+
+## 6. Generate SDK types
+
+Run:
 
 ```bash
-barekey env pull --format dotenv --out .env.local
+barekey typegen
 ```
 
-This writes a file like:
+This updates generated types inside your installed `@barekey/sdk` package so known keys become typed in your editor.
 
-```bash .env.local
-DATABASE_URL="postgres://localhost:5432/myapp_dev"
-STRIPE_KEY="sk_test_..."
+In development, you can keep it fresh:
+
+```bash
+barekey typegen --watch
 ```
 
-Add `.env.local` to `.gitignore`. Re-run `barekey env pull` whenever variables change upstream.
+## 7. Optional: pull to `.env.local`
+
+If your local workflow still expects a dotenv file:
+
+```bash
+barekey env pull --out .env.local
+```
+
+Or JSON:
+
+```bash
+barekey env pull --format json --out barekey.local.json
+```
 
 <Warning>
-  Pulled `.env` files contain plaintext secrets. Never commit them to version
-  control.
+  Pulled files contain plaintext values. Add them to `.gitignore`.
 </Warning>
 
----
-
-## Next steps
+## What next
 
 <CardGroup cols={2}>
-  <Card title="How Barekey works" icon="layer-group" href="/concepts/how-barekey-works">
-    Understand the org → project → stage model in depth.
+  <Card title="SDK guide" icon="code" href="/integrations/javascript-sdk">
+    Full server SDK, public SDK, standalone mode, typegen, and config reference.
   </Card>
-  <Card title="Variable kinds" icon="shuffle" href="/concepts/variable-kinds">
-    Learn about `secret` and `ab_roll` kinds, including deterministic evaluation.
+  <Card title="CLI guide" icon="terminal" href="/integrations/cli">
+    Full command reference with flags, examples, and output formats.
   </Card>
   <Card title="Local development" icon="laptop" href="/integrations/local-development">
-    The full pull workflow, `barekey.json` schema, and framework integration.
+    `barekey.json`, `.env` pull workflows, and standalone local reads.
   </Card>
-  <Card title="API reference" icon="code" href="/api-reference/introduction">
-    Direct HTTP API — useful for CI/CD, scripts, and non-Node environments.
+  <Card title="Variable kinds" icon="shuffle" href="/concepts/variable-kinds">
+    Understand `secret` and `ab_roll`.
   </Card>
 </CardGroup>
