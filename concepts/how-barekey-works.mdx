@@ -44,7 +44,7 @@ flowchart TD
   C -->|Match| D[Load variable metadata]
   D -->|Not found| Z3[404 VARIABLE_NOT_FOUND]
   D -->|Found| E[Load project DEK\nfrom projectKeys table]
-  E --> F[Decrypt variable payload\nwith AES-GCM-256]
+  E --> F[Decrypt variable payload\nwith XChaCha20-Poly1305]
   F -->|Decryption error| Z4[500 EVALUATION_FAILED]
   F -->|Success| G{Resolve kind}
   G -->|secret| H[Return plaintext value]
@@ -72,7 +72,7 @@ When you sign up, Barekey creates a personal org for you (e.g. `jane-12345`). Yo
 
 | Does | Does not |
 |---|---|
-| Encrypt variables at rest with AES-GCM-256 | Store plaintext values at any point |
+| Encrypt variables at rest with XChaCha20-Poly1305 | Store plaintext values at any point |
 | Issue short-lived access tokens for CLI/API use | Manage user permissions beyond org membership |
 | Isolate variable values per project per stage | Automatically sync or promote between stages |
 | Support deterministic A/B evaluation via seed | Replace a secrets manager for non-env-var workloads |

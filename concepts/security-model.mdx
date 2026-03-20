@@ -5,10 +5,10 @@ description: How Barekey encrypts secrets, hashes tokens, and what is and isn't 
 
 ## Encryption architecture
 
-Barekey uses **envelope encryption** with AES-GCM-256 throughout. There are two layers:
+Barekey uses **envelope encryption** with XChaCha20-Poly1305 throughout. There are two layers:
 
 ```
-BAREKEY_MASTER_KEY_B64  ← 256-bit AES-GCM key, stored as env variable outside the DB
+BAREKEY_MASTER_KEY_B64  ← 256-bit XChaCha20 key, stored as env variable outside the DB
         │
         └── encrypts ──► Project DEK  ← stored encrypted in the projectKeys table
                                 │
@@ -17,7 +17,7 @@ BAREKEY_MASTER_KEY_B64  ← 256-bit AES-GCM key, stored as env variable outside 
 
 ### Master KEK
 
-The master key encryption key (KEK) is a 32-byte AES-GCM key stored as a base64-encoded environment variable named `BAREKEY_MASTER_KEY_B64`. It is never stored in the database. It lives in the Convex environment and is loaded at runtime when a DEK needs to be unwrapped.
+The master key encryption key (KEK) is a 32-byte key stored as a base64-encoded environment variable named `BAREKEY_MASTER_KEY_B64`. It is never stored in the database. It lives in the Convex environment and is loaded at runtime when a DEK needs to be unwrapped.
 
 ### Per-project DEK
 
@@ -27,13 +27,13 @@ The DEK is never cached — it is loaded and unwrapped from the database on ever
 
 ### Variable encryption
 
-Each variable value (or A/B values for `ab_roll`) is encrypted individually using the project DEK with AES-GCM-256. The stored format is:
+Each variable value (or A/B values for `ab_roll`) is encrypted individually using the project DEK with XChaCha20-Poly1305. The stored format is:
 
 ```
-base64(iv) + "." + base64(ciphertext)
+xcp1 + "." + base64(nonce) + "." + base64(ciphertext)
 ```
 
-The IV (initialization vector) is 12 bytes of cryptographically random data, generated fresh for every encryption operation. Reusing IVs with the same key would be a critical vulnerability — Barekey generates a new IV on every write.
+The nonce is 24 bytes of cryptographically random data, generated fresh for every encryption operation. Barekey generates a new nonce on every write.
 
 ---
 
@@ -41,8 +41,8 @@ The IV (initialization vector) is 12 bytes of cryptographically random data, gen
 
 | Data | How it is stored |
 |---|---|
-| Variable values | AES-GCM encrypted under the project DEK |
-| Project DEKs | AES-GCM encrypted under the master KEK |
+| Variable values | XChaCha20-Poly1305 encrypted under the project DEK |
+| Project DEKs | XChaCha20-Poly1305 encrypted under the master KEK |
 | CLI device codes | SHA-256 hash (base64url encoded) |
 | CLI access tokens (`bk_at_...`) | SHA-256 hash |
 | CLI refresh tokens (`bk_rt_...`) | SHA-256 hash |

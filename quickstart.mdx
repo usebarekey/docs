@@ -1,12 +1,12 @@
 ---
 title: Quickstart
-description: Install the CLI, configure a project, create a variable, and read it with the Barekey SDK.
+description: Install the CLI, run barekey init, create a variable, and read it with the Barekey SDK.
 ---
 
 This quickstart uses the actual shipped workflow:
 
 1. Install and log into the CLI.
-2. Add a `barekey.json` file.
+2. Run `barekey init`.
 3. Create a variable.
 4. Read it with `@barekey/sdk/server`.
 
@@ -43,24 +43,38 @@ This quickstart uses the actual shipped workflow:
 Log in:
 
 ```bash
-barekey auth login
+barekey login
 ```
 
 Check the session:
 
 ```bash
-barekey auth whoami
+barekey whoami
 ```
 
-## 2. Add `barekey.json`
+## 2. Run `barekey init`
 
-Create a `barekey.json` file in your project root:
+In your project root, run:
+
+```bash
+barekey init
+```
+
+This walks you through org, project, and stage selection and writes `barekey.json` for you.
+
+The generated file looks like this:
 
 ```json
 {
+  "$schema": "./node_modules/@barekey/sdk/dist/barekey.schema.json",
   "organization": "acme",
   "project": "web",
-  "environment": "development"
+  "environment": "development",
+  "config": {
+    "mode": "centralized",
+    "typegen": "semantic",
+    "disallow_ambigious_keys": true
+  }
 }
 ```
 
@@ -79,6 +93,8 @@ Create a variable with an initial value:
 ```bash
 barekey env new DATABASE_URL "postgres://localhost:5432/app" --type string
 ```
+
+If you omit arguments in an interactive terminal, Barekey can prompt you step by step instead.
 
 Read it back:
 
@@ -142,6 +158,19 @@ import { barekey } from "./barekey";
 
 const databaseUrl = await barekey.get("DATABASE_URL");
 console.log(databaseUrl);
+```
+
+If you want stronger startup guarantees, pass a schema directly:
+
+```ts
+import { z } from "zod";
+import { BarekeyClient } from "@barekey/sdk/server";
+
+const barekey = new BarekeyClient({
+  requirements: z.object({
+    DATABASE_URL: z.string().url(),
+  }),
+});
 ```
 
 `await barekey.get("DATABASE_URL")` returns the parsed value for the variable's declared type.

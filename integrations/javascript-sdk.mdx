@@ -1,6 +1,6 @@
 ---
 title: JavaScript SDK
-description: Full guide to the Barekey SDK, including configuration, auth resolution, typegen, dynamic reads, public reads, and standalone local mode.
+description: Full guide to the Barekey SDK, including server reads, React/public reads, requirements schemas, typegen, and standalone local mode.
 ---
 
 Use the Barekey SDK when your code should read variables directly instead of shelling out to the CLI or depending on a pulled `.env` file.
@@ -101,12 +101,14 @@ This file is used by both the SDK and CLI.
 
 ```json
 {
+  "$schema": "./node_modules/@barekey/sdk/dist/barekey.schema.json",
   "organization": "acme",
   "project": "web",
   "environment": "development",
   "config": {
+    "mode": "centralized",
     "typegen": "semantic",
-    "mode": "centralized"
+    "disallow_ambigious_keys": true
   }
 }
 ```
@@ -120,6 +122,7 @@ This file is used by both the SDK and CLI.
 | `environment` | `string` | Yes in centralized mode | Stage name |
 | `org` | `string` | No | Alias for `organization` |
 | `stage` | `string` | No | Alias for `environment` |
+| `$schema` | `string` | No | JSON Schema path for editor autocomplete and validation |
 | `config` | `object` | No | Extra SDK and runtime behavior |
 
 ### `config` keys
@@ -128,6 +131,7 @@ This file is used by both the SDK and CLI.
 | --- | --- | --- | --- |
 | `config.mode` | `"centralized"` or `"standalone"` | `"centralized"` | Chooses API-backed Barekey mode or local `.env` file mode |
 | `config.typegen` | `"semantic"` or `"minimal"` | `"semantic"` in centralized mode, `"minimal"` in standalone mode | Controls the style of generated SDK types |
+| `config.disallow_ambigious_keys` | `boolean` | `true` | Makes non-generated keys a type error unless you opt out |
 
 ### Search behavior
 
@@ -140,7 +144,7 @@ That means one repo-level file can cover a whole monorepo.
 In centralized mode, `BarekeyClient` resolves credentials in this order:
 
 1. `BAREKEY_ACCESS_TOKEN`
-2. a stored CLI session created by `barekey auth login`
+2. a stored CLI session created by `barekey login`
 
 ### `BAREKEY_ACCESS_TOKEN`
 
@@ -164,7 +168,7 @@ This is the best fit for production deploys and CI.
 If `BAREKEY_ACCESS_TOKEN` is not set, the SDK tries to reuse the local CLI login. That is convenient for local development because you can log in once with:
 
 ```bash
-barekey auth login
+barekey login
 ```
 
 Then your app can usually run without extra token wiring.
@@ -279,14 +283,15 @@ This is the centralized default.
 
 It preserves Barekey metadata in the generated types, including:
 
-- mode
+- kind
 - visibility
+- rollout state
 
 #### `minimal`
 
 This is the standalone default.
 
-It generates simpler value types, which is useful when types are inferred from local `.env` files.
+It only generates the resolved value type, such as `string`, `boolean`, or an inferred object shape from local `.env` files.
 
 ### SDK-side typegen refresh
 
@@ -316,21 +321,26 @@ Notes:
 
 ## Requirements validation
 
-You can validate the resolved configuration against a Standard Schema v1 validator before reads proceed.
+You can validate the resolved configuration against any Standard Schema v1 validator before reads proceed.
+
+Pass the schema directly. You do not need to wrap `~standard` yourself.
 
 ```ts
+import { z } from "zod";
+import { BarekeyClient } from "@barekey/sdk/server";
+
 const client = new BarekeyClient({
-  requirements: {
-    "~standard": {
-      validate(value) {
-        return { value };
-      },
-    },
-  },
+  requirements: z.object({
+    DATABASE_URL: z.string().url(),
+    STRIPE_SECRET_KEY: z.string().min(1),
+    DEBUG_MODE: z.boolean(),
+  }),
 });
 ```
 
-Use this when you want startup-time guarantees that required Barekey values form a valid config object.
+This works with any library that exposes Standard Schema v1 metadata, including Zod and ArkType-compatible schemas.
+
+Use this when you want startup-time guarantees that your resolved Barekey values form a valid config object.
 
 ## Standalone mode
 
@@ -371,6 +381,49 @@ const client = new PublicBarekeyClient({
 });
 
 const title = await client.get("PUBLIC_TITLE");
+```
+
+## React `.tsx`
+
+Use `@barekey/react` when you want public values to feel like normal React data reads.
+
+Install it alongside the SDK:
+
+```bash
+bun add @barekey/react
+```
+
+```tsx
+import { PublicBarekeyClient } from "@barekey/sdk/public";
+import { BarekeyProvider, useBarekey } from "@barekey/react";
+import barekeyConfig from "../barekey.json";
+
+const client = new PublicBarekeyClient({
+  json: barekeyConfig,
+});
+
+function HeroBanner() {
+  const env = useBarekey();
+  const [title, tagline] = env.get([
+    "PUBLIC_TITLE",
+    "PUBLIC_TAGLINE",
+  ] as const);
+
+  return (
+    <section>
+      <h1>{title}</h1>
+      <p>{tagline}</p>
+    </section>
+  );
+}
+
+export function App() {
+  return (
+    <BarekeyProvider client={client}>
+      <HeroBanner />
+    </BarekeyProvider>
+  );
+}
 ```
 
 ### Important public-client rules

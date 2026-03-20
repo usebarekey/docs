@@ -1,24 +1,26 @@
 ---
 title: Barekey
-description: Barekey gives you one place to manage variables, then use them through a TypeScript SDK, a CLI, or a local standalone mode for .env workflows.
+description: Barekey gives you one place to manage variables, then use them from your server, React app, CLI, or local .env workflow.
 ---
 
-Barekey is a variable platform for teams that want better ergonomics than hand-managed `.env` files. In practice, most teams use it in one of two ways:
+Barekey is a variable platform for teams that want something better than hand-managed `.env` files. Most teams start here:
 
-- The SDK reads variables directly in your app.
-- The CLI manages variables and pulls them into local files when you want a classic `.env` workflow.
+- run `barekey login`
+- run `barekey init`
+- create variables from the dashboard or CLI
+- read them from `@barekey/sdk/server` or `@barekey/react`
 
-This documentation is organized around those two workflows first.
+This docs site is organized around the shipped workflows instead of abstract concepts first.
 
 <CardGroup cols={2}>
   <Card title="Quickstart" icon="bolt" href="/quickstart">
-    Install the CLI, add `barekey.json`, create a variable, and read it with the SDK.
+    Log in, run `barekey init`, create a variable, and read it in code.
   </Card>
   <Card title="SDK guide" icon="code" href="/integrations/javascript-sdk">
-    Learn constructor options, auth resolution, typegen, dynamic reads, public reads, and standalone mode.
+    Learn server reads, React/public reads, requirements schemas, typegen, and standalone mode.
   </Card>
   <Card title="CLI guide" icon="terminal" href="/integrations/cli">
-    Learn every command, target resolution rules, output modes, and practical day-to-day workflows.
+    Learn auth, init, org/project/stage commands, env workflows, and typegen.
   </Card>
   <Card title="Local development" icon="laptop" href="/integrations/local-development">
     Use `barekey.json`, pull values into `.env.local`, or point the SDK at local `.env` files with standalone mode.
@@ -36,7 +38,16 @@ Use `@barekey/sdk/server` when your app should resolve variables directly:
 - edge functions
 - scripts that already run in Node, Bun, or another `fetch`-compatible runtime
 
-This is the best fit when you want current values at runtime, generated types, and fewer plaintext files on disk.
+This is the best fit when you want current values at runtime, generated types, and less config glue in app code.
+
+### Use React for public values
+
+Use `@barekey/sdk/public` together with `@barekey/react` when you want public variables in a React app:
+
+- marketing copy
+- public feature flags
+- browser-safe structured config
+- React components that should read values without a custom fetch layer
 
 ### Use the CLI for setup, management, and local files
 
