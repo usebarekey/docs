@@ -1,0 +1,49 @@
+---
+title: Barekey vs Doppler
+description: Honest comparison between Barekey and Doppler for secrets management, sync workflows, and developer environments.
+---
+
+## Quick answer
+
+Doppler is better if your team wants to push secrets into lots of third-party platforms and deployment systems. Barekey is better if you want a more app-centered SDK workflow with public values, typed reads, and a simpler mental model.
+
+If sync integrations are your top priority, Doppler is ahead.
+
+## Where Barekey is stronger
+
+- Barekey is more direct for application reads through an SDK instead of only env injection and sync.
+- Barekey supports public/browser-safe values and React reads.
+- Barekey's standalone mode gives you one SDK API for both centralized and local `.env` workflows.
+- Barekey's declared types and typegen are more centered on application code than on deployment plumbing.
+
+## Where Doppler is stronger
+
+- Doppler has a stronger sync story across many third-party platforms and CI/CD systems.
+- Doppler service tokens are scoped to a single config and documented as the production-safe access pattern.
+- Doppler supports project permissions with per-project and per-environment access controls.
+- Doppler has config inheritance, automated syncs, webhooks, and Kubernetes operator workflows.
+- Doppler explicitly documents high-availability patterns that keep synced downstream secrets usable even if Doppler is temporarily unavailable.
+
+## Main tradeoff
+
+Doppler is stronger when your main workflow is "manage here, sync everywhere". Barekey is stronger when your main workflow is "define app variables once, then read them through a CLI or SDK in a product-shaped model".
+
+## Which to choose
+
+| Choose Barekey if... | Choose Doppler if... |
+| --- | --- |
+| you want app-first SDK reads | you want broad sync/integration coverage |
+| you want public React/browser values | you want per-config tokens and strong deployment-system integration |
+| you want one API for centralized and local standalone reads | you want config inheritance and operator-style sync workflows |
+| you want a simpler org/project/stage model | you want a secrets-control plane that pushes values into many destinations |
+
+## Official docs
+
+- [Barekey: JavaScript SDK](/integrations/javascript-sdk)
+- [Barekey: local development](/integrations/local-development)
+- [Doppler configs](https://docs.doppler.com/docs/root-configs)
+- [Doppler service tokens](https://docs.doppler.com/docs/service-tokens)
+- [Doppler automated syncs](https://docs.doppler.com/docs/integrations)
+- [Doppler project permissions](https://docs.doppler.com/docs/project-permissions)
+- [Doppler config inheritance](https://docs.doppler.com/docs/config-inheritance)
+- [Doppler high availability](https://docs.doppler.com/docs/high-availability)

@@ -1,0 +1,48 @@
+---
+title: Barekey vs Infisical
+description: Honest comparison between Barekey and Infisical for secrets management, self-hosting, and application-variable workflows.
+---
+
+## Quick answer
+
+Infisical is better if you want a broader modern secrets platform with self-hosting, machine identities, audit logging, secret syncs, and adjacent products like scanning, KMS, PKI, and PAM. Barekey is better if you want a tighter app-variable product with less surface area.
+
+This is another comparison where the alternative has broader coverage today.
+
+## Where Barekey is stronger
+
+- Barekey is more focused and easier to reason about if your main need is app variables.
+- Barekey's public/browser-safe variable support and React path are more explicit.
+- `barekey.json`, CLI login reuse, env pull, and standalone mode make the local-to-runtime story simpler.
+- Barekey's declared types and typegen are more opinionated around application code.
+
+## Where Infisical is stronger
+
+- Infisical organizes secrets across environments and folders and supports project-level roles, groups, temporary access, and access requests.
+- Infisical documents audit logging at both project and organization levels.
+- Infisical supports secret syncs to third-party services and treats the synced destination as continuously updated from the source.
+- Infisical supports self-hosting across Docker, Kubernetes, cloud VMs, and more.
+- Infisical's platform has grown beyond secrets into scanning, PKI, KMS, and PAM.
+
+## Main tradeoff
+
+Infisical is the stronger pick if you want a broader secrets platform or need self-hosting. Barekey is the stronger pick if you want a simpler application-variable workflow, especially in JavaScript and React-heavy teams.
+
+## Which to choose
+
+| Choose Barekey if... | Choose Infisical if... |
+| --- | --- |
+| you want a narrower product focused on app variables | you need self-hosting and broader platform features |
+| you want public values and React/browser reads | you need machine identities, richer access control, and audit depth |
+| you want one SDK API for centralized and local standalone modes | you need secret syncs into other systems |
+| you care more about app DX than platform breadth | you want one vendor for secrets plus related security products |
+
+## Official docs
+
+- [Barekey: how Barekey works](/concepts/how-barekey-works)
+- [Barekey: local development](/integrations/local-development)
+- [Infisical overview](https://infisical.com/docs)
+- [Infisical projects overview](https://infisical.com/docs/documentation/platform/project)
+- [Infisical secrets-management projects](https://infisical.com/docs/documentation/platform/secrets-mgmt/project)
+- [Infisical secret syncs overview](https://infisical.com/docs/integrations/secret-syncs/overview)
+- [Infisical self-hosting overview](https://infisical.com/docs/self-hosting/overview)

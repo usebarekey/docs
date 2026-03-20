@@ -1,0 +1,60 @@
+---
+title: Barekey vs alternatives
+description: Honest comparisons between Barekey and other tools people use for env vars, secrets, password managers, and vault workflows.
+---
+
+No tool is best at everything.
+
+Some alternatives are local `.env` tools. Some are password managers with developer add-ons. Some are full infrastructure vaults. Barekey is strongest when you want one product centered on app variables with:
+
+- organization, project, and stage scope
+- a CLI and dashboard
+- a JavaScript SDK
+- public/browser-safe reads
+- local `.env` compatibility through pull files or standalone mode
+
+This section compares Barekey with the alternatives you asked for, plus a few common vault-style products people actually use.
+
+## What is in this section
+
+<CardGroup cols={2}>
+  <Card title="Varlock" icon="code" href="/comparisons/varlock">
+    Schema-first local `.env` tooling with plugins, validation, and leak-detection features.
+  </Card>
+  <Card title="T3 Env" icon="shield-check" href="/comparisons/t3env">
+    Type-safe runtime validation for TypeScript apps, not a hosted secrets platform.
+  </Card>
+  <Card title="1Password" icon="key" href="/comparisons/1password">
+    Password manager plus developer secrets workflows, Environments, service accounts, and Connect.
+  </Card>
+  <Card title="Bitwarden" icon="lock" href="/comparisons/bitwarden">
+    Open source password manager with a separate Secrets Manager product.
+  </Card>
+  <Card title="HashiCorp Vault" icon="server" href="/comparisons/hashicorp-vault">
+    The infrastructure-heavy vault baseline for dynamic secrets, auth backends, and crypto services.
+  </Card>
+  <Card title="Infisical" icon="building-lock" href="/comparisons/infisical">
+    A broader secrets platform with self-hosting, syncs, audit logging, and adjacent security products.
+  </Card>
+  <Card title="Doppler" icon="arrows-rotate" href="/comparisons/doppler">
+    A developer-focused secrets platform with strong sync and deployment integrations.
+  </Card>
+</CardGroup>
+
+## How to read these comparisons
+
+- If another product is clearly better for a use case, the page says so.
+- If Barekey is simpler or better focused for app variables, the page says that too.
+- If the tools are not really in the same category, the page calls that out directly.
+
+## Short version
+
+| If you need... | Best starting point |
+| --- | --- |
+| a centralized app-variable platform with org/project/stage scope | Barekey |
+| schema-first local `.env` management | Varlock |
+| in-app TypeScript env validation only | T3 Env |
+| one place for human credentials and developer secrets | 1Password or Bitwarden |
+| deep infrastructure secrets features like dynamic credentials or crypto services | HashiCorp Vault |
+| a broader modern secrets platform with self-hosting and syncs | Infisical |
+| a sync-heavy deployment workflow across many third-party platforms | Doppler |

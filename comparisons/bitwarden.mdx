@@ -1,0 +1,43 @@
+---
+title: Barekey vs Bitwarden
+description: Honest comparison between Barekey and Bitwarden Secrets Manager for team secrets and environment workflows.
+---
+
+## Quick answer
+
+Bitwarden is better if you want an open source, zero-knowledge, self-hostable password-manager ecosystem with a separate Secrets Manager product. Barekey is better if you want a product built around app variables, stages, SDK reads, and public values.
+
+These products overlap more than Barekey and T3 Env, but they still optimize for different things.
+
+## Where Barekey is stronger
+
+- Barekey's org/project/stage model is more opinionated for application configuration.
+- Barekey supports public/browser-safe values and React reads, which is not Bitwarden Secrets Manager's focus.
+- Barekey's standalone mode and local `.env` workflows are closer to how app teams usually work day to day.
+- Barekey's typegen and declared types are more developer-experience oriented for application code.
+
+## Where Bitwarden is stronger
+
+- Bitwarden Secrets Manager gives you projects, machine accounts, access tokens, a web app, CLI, and SDK.
+- Bitwarden documents end-to-end encryption, zero-knowledge design, and open source code as core principles.
+- Bitwarden Secrets Manager can also be self-hosted.
+- If your team already uses Bitwarden for password management, adopting its secrets tooling can be operationally simpler than adding a separate platform.
+
+## Main tradeoff
+
+Bitwarden is stronger if open source, zero-knowledge positioning, or self-hosting is a hard requirement. Barekey is stronger if your main goal is a cleaner application-variable workflow with stages, SDKs, and browser/public support.
+
+## Which to choose
+
+| Choose Barekey if... | Choose Bitwarden if... |
+| --- | --- |
+| you want app-variable workflows more than vault workflows | you want open source and self-hosting in a mainstream password-manager ecosystem |
+| you want public React/browser reads | you want machine accounts and Secrets Manager around an existing Bitwarden rollout |
+| you want one API for centralized and local standalone reads | you want a product that also pairs naturally with password management |
+| you want typegen and app-facing metadata | you want Bitwarden's security model and hosting options |
+
+## Official docs
+
+- [Barekey: JavaScript SDK](/integrations/javascript-sdk)
+- [Barekey: local development](/integrations/local-development)
+- [Bitwarden Secrets Manager overview](https://bitwarden.com/help/secrets-manager-overview/)

@@ -1,0 +1,50 @@
+---
+title: Barekey vs HashiCorp Vault
+description: Honest comparison between Barekey and HashiCorp Vault for secrets management, auth, and application configuration.
+---
+
+## Quick answer
+
+If you need a serious infrastructure vault with dynamic credentials, multiple auth backends, cryptography services, and deep platform integrations, HashiCorp Vault is better than Barekey.
+
+Barekey is better when you want a much narrower, easier-to-adopt product focused on application variables rather than a general-purpose secrets and security control plane.
+
+## Where Barekey is stronger
+
+- Barekey is much simpler to understand for app teams.
+- The org/project/stage model is easier to map to normal application environments.
+- Barekey's CLI, SDK, public/browser-safe reads, and local standalone mode are more direct for app-variable usage.
+- You do not need to adopt Vault's broader operational model just to manage application variables.
+
+## Where Vault is stronger
+
+- Vault supports many auth methods and lets you choose the one that fits each environment.
+- Vault KV can keep multiple versions of a secret and supports recovery operations.
+- Vault Transit works as "cryptography as a service", which is outside Barekey's scope.
+- Vault's database and cloud-oriented engines support dynamic credentials and rotation patterns that Barekey does not currently document.
+- Vault's audit and operator story is much deeper for high-control environments.
+
+## Main tradeoff
+
+Vault is stronger for platform security engineering. Barekey is stronger for app teams that want a purpose-built variable workflow without taking on Vault's complexity.
+
+This is one of the clearest cases where the alternative really does beat Barekey for a large class of enterprise use cases.
+
+## Which to choose
+
+| Choose Barekey if... | Choose Vault if... |
+| --- | --- |
+| you want centralized app variables without running a full secrets platform | you need dynamic database or cloud credentials |
+| you want public/browser-safe app values | you need many auth backends and policy-heavy infrastructure access |
+| you want a simpler CLI and SDK path for developers | you need Transit, PKI, or broader secrets engines |
+| you care more about app DX than platform depth | you have a platform/security team ready to operate Vault well |
+
+## Official docs
+
+- [Barekey: security model](/concepts/security-model)
+- [Barekey: JavaScript SDK](/integrations/javascript-sdk)
+- [Vault auth methods](https://developer.hashicorp.com/vault/docs/auth)
+- [Vault KV secrets engine](https://developer.hashicorp.com/vault/docs/secrets/kv)
+- [Vault Transit secrets engine](https://developer.hashicorp.com/vault/docs/secrets/transit)
+- [Vault database secrets engine](https://developer.hashicorp.com/vault/docs/secrets/databases)
+- [Vault audit logging best practices](https://developer.hashicorp.com/vault/docs/audit/best-practices)

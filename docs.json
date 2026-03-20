@@ -49,6 +49,19 @@
               "integrations/local-development",
               "integrations/patterns"
             ]
+          },
+          {
+            "group": "Barekey vs alternatives",
+            "pages": [
+              "comparisons/index",
+              "comparisons/varlock",
+              "comparisons/t3env",
+              "comparisons/1password",
+              "comparisons/bitwarden",
+              "comparisons/hashicorp-vault",
+              "comparisons/infisical",
+              "comparisons/doppler"
+            ]
           }
         ]
       },

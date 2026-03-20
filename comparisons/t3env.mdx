@@ -1,0 +1,47 @@
+---
+title: Barekey vs T3 Env
+description: Honest comparison between Barekey and T3 Env for environment-variable validation and developer workflows.
+---
+
+## Quick answer
+
+If you only need type-safe environment validation inside a TypeScript app, T3 Env is better than Barekey. It is smaller, simpler, and built exactly for that job.
+
+Barekey becomes the better fit when your variables need to be managed outside the app itself across teams, stages, and runtimes.
+
+## Where Barekey is stronger
+
+- Barekey is a full variable platform, not just an in-app validation library.
+- You get a dashboard, CLI auth, centralized storage, org/project/stage scope, and SDK reads.
+- Barekey supports public/browser-safe reads and a React integration.
+- Barekey supports local `.env` compatibility through pull workflows and standalone mode.
+- Barekey gives you declared types, generated types, and runtime metadata for values.
+
+## Where T3 Env is stronger
+
+- T3 Env is better when you want zero extra service, zero dashboard, and zero remote dependency.
+- It is purpose-built for validating `process.env` or `import.meta.env` in TypeScript apps.
+- It works with Standard Schema validators such as Zod, Valibot, ArkType, and Typia.
+- It enforces client prefixes and has strict runtime-env wiring for frameworks that tree-shake env access.
+- If your deployment platform already manages secrets and you just want safer app code, T3 Env is the more direct tool.
+
+## Main tradeoff
+
+T3 Env helps you trust the env you already have. Barekey helps you manage and distribute the env itself.
+
+That means this is not really a "which one is universally better" question. For pure validation, T3 Env wins. For shared secret and variable operations, Barekey wins.
+
+## Which to choose
+
+| Choose Barekey if... | Choose T3 Env if... |
+| --- | --- |
+| you need shared environments across people, services, or stages | you only need validation inside one TypeScript app |
+| you want a CLI, dashboard, and remote source of truth | your platform already injects the real env values |
+| you want public React reads and centralized private values | you want the smallest possible solution |
+| you want one API for centralized and local standalone reads | you want to stay entirely inside framework-native env workflows |
+
+## Official docs
+
+- [Barekey: quickstart](/quickstart)
+- [Barekey: JavaScript SDK](/integrations/javascript-sdk)
+- [T3 Env core docs](https://env.t3.gg/docs/core)

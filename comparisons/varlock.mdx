@@ -1,0 +1,51 @@
+---
+title: Barekey vs Varlock
+description: Honest comparison between Barekey and Varlock for environment variables, secrets, and local development workflows.
+---
+
+## Quick answer
+
+Varlock is better if you want a schema-first, local-first replacement for `.env` tooling. Barekey is better if you want a centralized variable platform with a dashboard, CLI login flow, SDK reads, public-variable support, and organization/project/stage scope.
+
+These tools overlap, but they come from different directions.
+
+## Where Barekey is stronger
+
+- You get a centralized model out of the box: `organization -> project -> stage -> variable`.
+- You can read values through the Barekey SDK instead of only resolving them into process env.
+- You can expose browser-safe public variables with `@barekey/sdk/public` and `@barekey/react`.
+- You can use one SDK API in both centralized mode and local standalone `.env` mode.
+- You get declared types, generated types, and first-class metadata for reads.
+- Barekey supports variable kinds like `secret` and `ab_roll`, so it is closer to an app-variable platform than a pure dotenv replacement.
+
+## Where Varlock is stronger
+
+- Varlock is better at schema-first local `.env` workflows. Its `.env.schema` format is the center of the product.
+- Varlock is a more natural fit if you want to keep secrets in external systems and fetch them at runtime with plugins or CLI commands.
+- Varlock documents security guardrails such as log redaction, bundled-code leak detection, and outgoing-response scanning.
+- Varlock has official integrations and plugins for tools like 1Password, AWS, Azure Key Vault, Bitwarden, HashiCorp Vault, Google Secret Manager, Infisical, and `pass`.
+- If you want a drop-in upgrade from `dotenv` with minimal app architecture changes, Varlock is the better fit.
+
+## Main tradeoff
+
+Choose Barekey when you want a managed source of truth for app variables. Choose Varlock when you want a more powerful schema and resolution layer around `.env` files and external secret sources.
+
+Varlock is stronger for local config engineering. Barekey is stronger for centralized app-variable workflows.
+
+## Which to choose
+
+| Choose Barekey if... | Choose Varlock if... |
+| --- | --- |
+| you want a dashboard, CLI auth flow, and remote variable storage | you want your `.env.schema` file to be the source of truth |
+| you want public/browser-safe variable reads in React | you want to keep using local `.env` conventions and improve them |
+| you want one product for org/project/stage scoped variables | you want plugins into existing secret stores |
+| you want SDK reads instead of only env injection | you want leak detection and redaction features around local env handling |
+
+## Official docs
+
+- [Barekey: how Barekey works](/concepts/how-barekey-works)
+- [Barekey: JavaScript SDK](/integrations/javascript-sdk)
+- [Varlock introduction](https://varlock.dev/getting-started/introduction/)
+- [Varlock schema guide](https://varlock.dev/guides/schema/)
+- [Varlock secrets guide](https://varlock.dev/guides/secrets/)
+- [Varlock plugins overview](https://varlock.dev/plugins/overview/)
